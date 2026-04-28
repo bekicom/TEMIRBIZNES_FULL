@@ -660,6 +660,15 @@
   background: #e2e8f0;
 }
 
+.cargo-error {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  color: #991b1b;
+  background: #fee2e2;
+  font-weight: 800;
+}
+
 .cargo-table-wrap {
   overflow-x: auto;
   border: 1px solid #e2e8f0;

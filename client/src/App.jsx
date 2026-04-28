@@ -7,6 +7,7 @@ const emptyCargoForm = {
   carId: '',
   grossWeight: '',
   emptyWeight: '',
+  discountWeight: '',
   pricePerKg: '',
 }
 
@@ -51,6 +52,7 @@ function App() {
     return savedCargoEntries ? JSON.parse(savedCargoEntries) : []
   })
   const [editingCargoId, setEditingCargoId] = useState(null)
+  const [cargoError, setCargoError] = useState('')
   const [dashboardFilters, setDashboardFilters] = useState({
     from: '',
     to: '',
@@ -59,7 +61,7 @@ function App() {
   const grossWeight = parseNumber(cargoForm.grossWeight)
   const emptyWeight = parseNumber(cargoForm.emptyWeight)
   const cargoWeight = Math.max(grossWeight - emptyWeight, 0)
-  const discountWeight = cargoWeight * 0.02
+  const discountWeight = parseNumber(cargoForm.discountWeight)
   const netWeight = Math.max(cargoWeight - discountWeight, 0)
   const pricePerKg = parseNumber(cargoForm.pricePerKg)
   const totalAmount = netWeight * pricePerKg
@@ -216,6 +218,7 @@ function App() {
   }
 
   const updateCargoField = (field, value) => {
+    setCargoError('')
     setCargoForm((currentForm) => ({
       ...currentForm,
       [field]: value,
@@ -225,6 +228,7 @@ function App() {
   const resetCargoForm = () => {
     setCargoForm(emptyCargoForm)
     setEditingCargoId(null)
+    setCargoError('')
   }
 
   const handleSaveCargo = (event) => {
@@ -232,7 +236,23 @@ function App() {
 
     const selectedCar = cars.find((car) => car.id === cargoForm.carId)
 
-    if (!selectedCar || !cargoForm.date || !grossWeight || !pricePerKg) {
+    if (!cargoForm.date) {
+      setCargoError('Sanani tanlang')
+      return
+    }
+
+    if (!selectedCar) {
+      setCargoError('Mashinani tanlang')
+      return
+    }
+
+    if (!grossWeight) {
+      setCargoError("To'la vaznini kiriting")
+      return
+    }
+
+    if (!pricePerKg) {
+      setCargoError('Kilosiga pulni kiriting')
       return
     }
 
@@ -267,6 +287,7 @@ function App() {
       carId: entry.carId,
       grossWeight: String(entry.grossWeight),
       emptyWeight: String(entry.emptyWeight),
+      discountWeight: String(entry.discountWeight),
       pricePerKg: String(entry.pricePerKg),
     })
     setActivePage('cargo-delivery')
@@ -287,7 +308,7 @@ function App() {
       "To'la vazni": entry.grossWeight,
       'Yuksiz vazni': entry.emptyWeight,
       'Qolgan yuki': entry.cargoWeight,
-      'Skidka 2%': entry.discountWeight,
+      Skidka: entry.discountWeight,
       'Qolgan vazn': entry.netWeight,
       'Kilosiga pul': entry.pricePerKg,
       'Aniq summa': Math.round(entry.totalAmount),
@@ -703,10 +724,17 @@ function App() {
                   <strong>{formatWeight(cargoWeight)}</strong>
                 </div>
 
-                <div className="calculated-field">
-                  <span>Skidka 2%</span>
-                  <strong>{formatWeight(discountWeight)}</strong>
-                </div>
+                <label>
+                  Skidka
+                  <input
+                    inputMode="decimal"
+                    value={cargoForm.discountWeight}
+                    onChange={(event) =>
+                      updateCargoField('discountWeight', event.target.value)
+                    }
+                    placeholder="Skidka"
+                  />
+                </label>
 
                 <div className="calculated-field highlight-field">
                   <span>Qolgan vazn</span>
@@ -740,6 +768,10 @@ function App() {
                     </button>
                   ) : null}
                 </div>
+
+                {cargoError ? (
+                  <p className="cargo-error">{cargoError}</p>
+                ) : null}
               </form>
 
               <div className="cargo-table-wrap">
