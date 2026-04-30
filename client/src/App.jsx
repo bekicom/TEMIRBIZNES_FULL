@@ -47,6 +47,19 @@ const isWithinDateRange = (date, from, to) => {
   return afterFrom && beforeTo
 }
 
+const autosizeWorksheetColumns = (worksheet, rows) => {
+  const widths = rows.reduce((result, row) => {
+    row.forEach((cell, index) => {
+      const valueLength = String(cell ?? '').length
+      result[index] = Math.max(result[index] || 10, Math.min(valueLength + 2, 28))
+    })
+
+    return result
+  }, [])
+
+  worksheet['!cols'] = widths.map((width) => ({ wch: width }))
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   (window.location.hostname === 'localhost'
@@ -1481,6 +1494,46 @@ function App() {
     }
 
     const workbook = XLSX.utils.book_new()
+    const reportRows = [
+      ['Klent', selectedClient.name],
+      ['Telefon', selectedClient.phone || '-'],
+      ['Dan', clientFilters.from || '-'],
+      ['Gacha', clientFilters.to || '-'],
+      [],
+      ["Boshlang'ich saldo", Math.round(selectedClientOpeningBalance)],
+      ['Davr qarz', Math.round(selectedClientObligationAmount)],
+      ["Davr to'lov", Math.round(selectedClientPaidAmount)],
+      ['Yakuniy saldo', Math.round(selectedClientRemainingDebt)],
+      [],
+      ['Qarzlar'],
+      ['Sana', 'Topshirish', 'Yuk kg', "To'lov kg", 'Qarz'],
+      ...(selectedClientOpeningPayable || selectedClientOpeningReceivable
+        ? [[
+            "Boshlang'ich",
+            '-',
+            '-',
+            '-',
+            Math.round(selectedClientOpeningBalance),
+          ]]
+        : []),
+      ...selectedClientObligationList.map((row) => [
+        row.date,
+        row.deliveries,
+        Number(row.cargoWeight.toFixed(1)),
+        Number(row.payWeight.toFixed(1)),
+        Math.round(row.obligationAmount),
+      ]),
+      ...(selectedClientObligationList.length ? [] : [['Yozuv yo‘q', '-', '-', '-', 0]]),
+      [],
+      ["To'lovlar"],
+      ['Sana', 'Summa', 'Izoh'],
+      ...selectedClientPaymentHistory.map((row) => [
+        row.date,
+        Math.round(row.amount || 0),
+        row.note || '-',
+      ]),
+      ...(selectedClientPaymentHistory.length ? [] : [['Yozuv yo‘q', 0, '-']]),
+    ]
     const summaryRows = [
       {
         Klent: selectedClient.name,
@@ -1518,7 +1571,15 @@ function App() {
       Summa: Math.round(row.amount || 0),
       Izoh: row.note || '-',
     }))
+    const reportSheet = XLSX.utils.aoa_to_sheet(reportRows)
 
+    autosizeWorksheetColumns(reportSheet, reportRows)
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      reportSheet,
+      'Aktsverka',
+    )
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(summaryRows),
@@ -1543,6 +1604,45 @@ function App() {
     }
 
     const workbook = XLSX.utils.book_new()
+    const reportRows = [
+      ['Zavod', selectedFactory.name],
+      ['Dan', factoryFilters.from || '-'],
+      ['Gacha', factoryFilters.to || '-'],
+      [],
+      ["Boshlang'ich saldo", Math.round(selectedFactoryOpeningBalance)],
+      ['Davr qarz', Math.round(selectedFactoryObligationAmount)],
+      ["Davr to'lov", Math.round(selectedFactoryPaidAmount)],
+      ['Yakuniy saldo', Math.round(selectedFactoryRemainingDebt)],
+      [],
+      ['Yuklar'],
+      ['Sana', 'Mashina', 'Sof kg', 'Bizning pul'],
+      ...(selectedFactoryOpeningPayable || selectedFactoryOpeningReceivable
+        ? [[
+            "Boshlang'ich",
+            '-',
+            '-',
+            Math.round(selectedFactoryOpeningBalance),
+          ]]
+        : []),
+      ...selectedFactoryCargoEntries.map((row) => [
+        row.date,
+        row.carNumber,
+        Number((row.netWeight || 0).toFixed(1)),
+        Math.round(row.totalAmount || 0),
+      ]),
+      ...(selectedFactoryCargoEntries.length ? [] : [['Yozuv yo‘q', '-', '-', 0]]),
+      [],
+      ["To'lovlar"],
+      ['Sana', 'USD', 'Kurs', 'Summa', 'Izoh'],
+      ...selectedFactoryPaymentHistory.map((row) => [
+        row.date,
+        row.usdAmount || 0,
+        row.exchangeRate || 0,
+        Math.round(row.amount || 0),
+        row.note || '-',
+      ]),
+      ...(selectedFactoryPaymentHistory.length ? [] : [['Yozuv yo‘q', 0, 0, 0, '-']]),
+    ]
     const summaryRows = [
       {
         Zavod: selectedFactory.name,
@@ -1579,7 +1679,15 @@ function App() {
       Summa: Math.round(row.amount || 0),
       Izoh: row.note || '-',
     }))
+    const reportSheet = XLSX.utils.aoa_to_sheet(reportRows)
 
+    autosizeWorksheetColumns(reportSheet, reportRows)
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      reportSheet,
+      'Aktsverka',
+    )
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.json_to_sheet(summaryRows),
