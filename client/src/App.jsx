@@ -42,7 +42,9 @@ const formatMoney = (value) =>
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  `${window.location.protocol}//${window.location.hostname}:5000`
+  (window.location.hostname === 'localhost'
+    ? `${window.location.protocol}//${window.location.hostname}:5000`
+    : 'https://temirbiznes-gdlkmbt6k-bekicoms-projects.vercel.app')
 
 const requestJson = async (path, options = {}) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
