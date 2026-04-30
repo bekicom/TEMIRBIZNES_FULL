@@ -1498,47 +1498,104 @@ function App() {
     }
 
     const workbook = XLSX.utils.book_new()
+    let clientRunningBalance = selectedClientOpeningBalance
+    const clientLedgerRows = [
+      ['Sana', 'Mashina', "To'la", 'Yuksiz', 'Yuk', 'Skidka', "To'lov kg", 'Klent narxi', 'Qarz', "To'lov", 'Izoh', 'Qoldiq'],
+      ...(selectedClientOpeningBalance
+        ? [[
+            clientFilters.from || "Boshlang'ich",
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            "Boshlang'ich qoldiq",
+            formatMoneyText(clientRunningBalance),
+          ]]
+        : []),
+    ]
+
+    const clientLedgerItems = [
+      ...selectedClientCargoEntries.map((entry) => ({
+        type: 'cargo',
+        sortDate: entry.date,
+        date: entry.date,
+        carNumber: entry.carNumber || '',
+        grossWeight: entry.grossWeight || 0,
+        emptyWeight: entry.emptyWeight || 0,
+        cargoWeight: entry.cargoWeight || 0,
+        discountWeight: entry.discountWeight || 0,
+        payWeight: entry.clientPayWeight || entry.cargoWeight || 0,
+        clientPricePerKg: entry.clientPricePerKg || 0,
+        debtAmount: entry.clientTotalAmount || 0,
+      })),
+      ...selectedClientPaymentHistory.map((payment) => ({
+        type: 'payment',
+        sortDate: payment.date,
+        date: payment.date,
+        paymentAmount: payment.amount || 0,
+        note: payment.note || '-',
+      })),
+    ].sort((first, second) => {
+      if (first.sortDate === second.sortDate) {
+        return first.type === second.type ? 0 : first.type === 'cargo' ? -1 : 1
+      }
+
+      return first.sortDate < second.sortDate ? -1 : 1
+    })
+
+    clientLedgerItems.forEach((item) => {
+      if (item.type === 'cargo') {
+        clientRunningBalance += item.debtAmount
+        clientLedgerRows.push([
+          item.date,
+          item.carNumber,
+          formatMoney(item.grossWeight),
+          formatMoney(item.emptyWeight),
+          formatMoney(item.cargoWeight),
+          formatWeight(item.discountWeight),
+          formatWeight(item.payWeight),
+          formatMoneyText(item.clientPricePerKg),
+          formatMoneyText(item.debtAmount),
+          '',
+          '',
+          formatMoneyText(clientRunningBalance),
+        ])
+      } else {
+        clientRunningBalance -= item.paymentAmount
+        clientLedgerRows.push([
+          item.date,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          formatMoneyText(item.paymentAmount),
+          item.note,
+          formatMoneyText(clientRunningBalance),
+        ])
+      }
+    })
+
     const reportRows = [
       ['KLENT BILAN AKTSVERKA'],
-      [],
       ['Klent ismi', selectedClient.name],
       ['Telefon raqami', selectedClient.phone || '-'],
       ['Hisobot boshi', clientFilters.from || 'Barcha davr'],
       ['Hisobot oxiri', clientFilters.to || 'Barcha davr'],
-      [],
       ['Boshlang‘ich qoldiq', formatMoneyText(selectedClientOpeningBalance)],
       ['Shu davrda olingan yuklar summasi', formatMoneyText(selectedClientObligationAmount)],
       ['Shu davrda berilgan pullar', formatMoneyText(selectedClientPaidAmount)],
       ['Davr oxiridagi qoldiq', formatMoneyText(selectedClientRemainingDebt)],
       [],
-      ['1. YUKLAR BO‘YICHA HISOB'],
-      ['Sana', 'Topshirish soni', 'Yuk og‘irligi', "Hisob kg", 'Summa'],
-      ...(selectedClientOpeningPayable || selectedClientOpeningReceivable
-        ? [[
-            "Boshlang‘ich qoldiq",
-            '',
-            '',
-            '',
-            formatMoneyText(selectedClientOpeningBalance),
-          ]]
-        : []),
-      ...selectedClientObligationList.map((row) => [
-        row.date,
-        row.deliveries,
-        formatWeightText(row.cargoWeight),
-        formatWeightText(row.payWeight),
-        formatMoneyText(row.obligationAmount),
-      ]),
-      ...(selectedClientObligationList.length ? [] : [['Yozuv yo‘q', '', '', '', '']]),
-      [],
-      ['2. TO‘LOVLAR TARIXI'],
-      ['Sana', 'Berilgan summa', 'Izoh'],
-      ...selectedClientPaymentHistory.map((row) => [
-        row.date,
-        formatMoneyText(row.amount || 0),
-        row.note || '-',
-      ]),
-      ...(selectedClientPaymentHistory.length ? [] : [['Yozuv yo‘q', '', '-']]),
+      ...clientLedgerRows,
     ]
     const summaryRows = [
       {
@@ -1610,46 +1667,111 @@ function App() {
     }
 
     const workbook = XLSX.utils.book_new()
+    let factoryRunningBalance = selectedFactoryOpeningBalance
+    const factoryLedgerRows = [
+      ['Sana', 'Mashina', "To'la", 'Yuksiz', 'Yuk', 'Skidka', 'Sof kg', 'Narx', 'Qarz', 'USD', 'Kurs', "To'lov", 'Izoh', 'Qoldiq'],
+      ...(selectedFactoryOpeningBalance
+        ? [[
+            factoryFilters.from || "Boshlang'ich",
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            "Boshlang'ich qoldiq",
+            formatMoneyText(factoryRunningBalance),
+          ]]
+        : []),
+    ]
+
+    const factoryLedgerItems = [
+      ...selectedFactoryCargoEntries.map((entry) => ({
+        type: 'cargo',
+        sortDate: entry.date,
+        date: entry.date,
+        carNumber: entry.carNumber || '',
+        grossWeight: entry.grossWeight || 0,
+        emptyWeight: entry.emptyWeight || 0,
+        cargoWeight: entry.cargoWeight || 0,
+        discountWeight: entry.discountWeight || 0,
+        netWeight: entry.netWeight || 0,
+        pricePerKg: entry.pricePerKg || 0,
+        debtAmount: entry.totalAmount || 0,
+      })),
+      ...selectedFactoryPaymentHistory.map((payment) => ({
+        type: 'payment',
+        sortDate: payment.date,
+        date: payment.date,
+        usdAmount: payment.usdAmount || 0,
+        exchangeRate: payment.exchangeRate || 0,
+        paymentAmount: payment.amount || 0,
+        note: payment.note || '-',
+      })),
+    ].sort((first, second) => {
+      if (first.sortDate === second.sortDate) {
+        return first.type === second.type ? 0 : first.type === 'cargo' ? -1 : 1
+      }
+
+      return first.sortDate < second.sortDate ? -1 : 1
+    })
+
+    factoryLedgerItems.forEach((item) => {
+      if (item.type === 'cargo') {
+        factoryRunningBalance += item.debtAmount
+        factoryLedgerRows.push([
+          item.date,
+          item.carNumber,
+          formatMoney(item.grossWeight),
+          formatMoney(item.emptyWeight),
+          formatMoney(item.cargoWeight),
+          formatWeight(item.discountWeight),
+          formatWeight(item.netWeight),
+          formatMoneyText(item.pricePerKg),
+          formatMoneyText(item.debtAmount),
+          '',
+          '',
+          '',
+          '',
+          formatMoneyText(factoryRunningBalance),
+        ])
+      } else {
+        factoryRunningBalance -= item.paymentAmount
+        factoryLedgerRows.push([
+          item.date,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          item.usdAmount ? `${formatMoney(item.usdAmount)} $` : '',
+          item.exchangeRate ? formatMoney(item.exchangeRate) : '',
+          formatMoneyText(item.paymentAmount),
+          item.note,
+          formatMoneyText(factoryRunningBalance),
+        ])
+      }
+    })
+
     const reportRows = [
       ['ZAVOD BILAN AKTSVERKA'],
-      [],
       ['Zavod nomi', selectedFactory.name],
       ['Hisobot boshi', factoryFilters.from || 'Barcha davr'],
       ['Hisobot oxiri', factoryFilters.to || 'Barcha davr'],
-      [],
       ['Boshlang‘ich qoldiq', formatMoneyText(selectedFactoryOpeningBalance)],
       ['Shu davrda topshirilgan yuklar summasi', formatMoneyText(selectedFactoryObligationAmount)],
       ['Shu davrda zavod to‘lagan pul', formatMoneyText(selectedFactoryPaidAmount)],
       ['Davr oxiridagi qoldiq', formatMoneyText(selectedFactoryRemainingDebt)],
       [],
-      ['1. YUKLAR BO‘YICHA HISOB'],
-      ['Sana', 'Mashina', 'Sof kg', 'Summa'],
-      ...(selectedFactoryOpeningPayable || selectedFactoryOpeningReceivable
-        ? [[
-            "Boshlang‘ich qoldiq",
-            '',
-            '',
-            formatMoneyText(selectedFactoryOpeningBalance),
-          ]]
-        : []),
-      ...selectedFactoryCargoEntries.map((row) => [
-        row.date,
-        row.carNumber,
-        formatWeightText(row.netWeight || 0),
-        formatMoneyText(row.totalAmount || 0),
-      ]),
-      ...(selectedFactoryCargoEntries.length ? [] : [['Yozuv yo‘q', '', '', '']]),
-      [],
-      ['2. TO‘LOVLAR TARIXI'],
-      ['Sana', 'USD', 'Kurs', 'So‘mga aylangan summa', 'Izoh'],
-      ...selectedFactoryPaymentHistory.map((row) => [
-        row.date,
-        row.usdAmount ? `${formatMoney(row.usdAmount)} $` : '-',
-        row.exchangeRate ? formatMoney(row.exchangeRate) : '-',
-        formatMoneyText(row.amount || 0),
-        row.note || '-',
-      ]),
-      ...(selectedFactoryPaymentHistory.length ? [] : [['Yozuv yo‘q', '', '', '', '-']]),
+      ...factoryLedgerRows,
     ]
     const summaryRows = [
       {
