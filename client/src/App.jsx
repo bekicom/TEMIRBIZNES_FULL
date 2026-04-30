@@ -40,6 +40,13 @@ const formatWeight = (value) =>
 const formatMoney = (value) =>
   Math.round(value).toLocaleString('ru-RU')
 
+const isWithinDateRange = (date, from, to) => {
+  const afterFrom = from ? date >= from : true
+  const beforeTo = to ? date <= to : true
+
+  return afterFrom && beforeTo
+}
+
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   (window.location.hostname === 'localhost'
@@ -287,18 +294,18 @@ function App() {
     0,
   )
   const averagePrice = totalNetKg ? totalAmountAll / totalNetKg : 0
-  const filteredClientCargoEntries = cargoEntries.filter((entry) => {
-    const afterFrom = clientFilters.from ? entry.date >= clientFilters.from : true
-    const beforeTo = clientFilters.to ? entry.date <= clientFilters.to : true
-
-    return afterFrom && beforeTo
-  })
-  const filteredClientPaymentEntries = clientPayments.filter((payment) => {
-    const afterFrom = clientFilters.from ? payment.date >= clientFilters.from : true
-    const beforeTo = clientFilters.to ? payment.date <= clientFilters.to : true
-
-    return afterFrom && beforeTo
-  })
+  const filteredClientCargoEntries = cargoEntries.filter((entry) =>
+    isWithinDateRange(entry.date, clientFilters.from, clientFilters.to),
+  )
+  const filteredClientPaymentEntries = clientPayments.filter((payment) =>
+    isWithinDateRange(payment.date, clientFilters.from, clientFilters.to),
+  )
+  const previousClientCargoEntries = cargoEntries.filter((entry) =>
+    clientFilters.from ? entry.date < clientFilters.from : false,
+  )
+  const previousClientPaymentEntries = clientPayments.filter((payment) =>
+    clientFilters.from ? payment.date < clientFilters.from : false,
+  )
   const clientObligationRows = filteredClientCargoEntries.reduce((map, entry) => {
     const key = `${entry.date}::${entry.clientId || entry.clientName}`
     const currentRow = map.get(key) || {
@@ -339,35 +346,51 @@ function App() {
       const clientPaymentItems = filteredClientPaymentEntries.filter(
         (payment) => payment.clientId === client.id,
       )
-      const obligationAmount = clientCargoEntries.reduce(
+      const previousCargoItems = previousClientCargoEntries.filter(
+        (entry) => entry.clientId === client.id,
+      )
+      const previousPaymentItems = previousClientPaymentEntries.filter(
+        (payment) => payment.clientId === client.id,
+      )
+      const periodObligationAmount = clientCargoEntries.reduce(
         (sum, entry) => sum + (entry.clientTotalAmount || 0),
         0,
       )
       const openingPayable = client.openingPayable || 0
       const openingReceivable = client.openingReceivable || 0
+      const previousObligationAmount = previousCargoItems.reduce(
+        (sum, entry) => sum + (entry.clientTotalAmount || 0),
+        0,
+      )
       const payWeight = clientCargoEntries.reduce(
         (sum, entry) => sum + (entry.clientPayWeight || entry.cargoWeight || 0),
         0,
       )
       const deliveries = clientCargoEntries.length
-      const paidAmount = clientPaymentItems.reduce(
+      const previousPaidAmount = previousPaymentItems.reduce(
         (sum, payment) => sum + (payment.amount || 0),
         0,
       )
-      const totalPayable = obligationAmount + openingPayable
-      const totalReceivable = openingReceivable
-      const remainingDebt = totalPayable - (paidAmount + totalReceivable)
+      const periodPaidAmount = clientPaymentItems.reduce(
+        (sum, payment) => sum + (payment.amount || 0),
+        0,
+      )
+      const openingBalance =
+        openingPayable -
+        openingReceivable +
+        previousObligationAmount -
+        previousPaidAmount
+      const remainingDebt = openingBalance + periodObligationAmount - periodPaidAmount
 
       return {
         client,
         deliveries,
         payWeight,
-        obligationAmount,
+        obligationAmount: periodObligationAmount,
         openingPayable,
         openingReceivable,
-        totalPayable,
-        totalReceivable,
-        paidAmount,
+        openingBalance,
+        paidAmount: periodPaidAmount,
         remainingDebt,
       }
     })
@@ -376,16 +399,17 @@ function App() {
         row.deliveries > 0 ||
         row.paidAmount > 0 ||
         row.obligationAmount > 0 ||
+        row.openingBalance !== 0 ||
         row.openingPayable > 0 ||
         row.openingReceivable > 0,
     )
     .sort((first, second) => second.remainingDebt - first.remainingDebt)
   const totalClientPaymentAmount = clientSummaryRows.reduce(
-    (sum, row) => sum + row.totalPayable,
+    (sum, row) => sum + row.obligationAmount,
     0,
   )
   const totalClientPaidAmount = clientSummaryRows.reduce(
-    (sum, row) => sum + row.paidAmount + row.totalReceivable,
+    (sum, row) => sum + row.paidAmount,
     0,
   )
   const totalClientRemainingDebt = clientSummaryRows.reduce(
@@ -397,12 +421,22 @@ function App() {
     0,
   )
   const selectedClient = clients.find((client) => client.id === selectedClientId) || null
-  const selectedClientCargoEntries = cargoEntries.filter(
+  const selectedClientCargoEntries = filteredClientCargoEntries.filter(
+    (entry) => entry.clientId === selectedClientId,
+  )
+  const selectedClientPreviousCargoEntries = previousClientCargoEntries.filter(
     (entry) => entry.clientId === selectedClientId,
   )
   const selectedClientPaymentHistory = clientPayments
-    .filter((payment) => payment.clientId === selectedClientId)
+    .filter(
+      (payment) =>
+        payment.clientId === selectedClientId &&
+        isWithinDateRange(payment.date, clientFilters.from, clientFilters.to),
+    )
     .sort((first, second) => (first.date < second.date ? 1 : -1))
+  const selectedClientPreviousPaymentHistory = previousClientPaymentEntries.filter(
+    (payment) => payment.clientId === selectedClientId,
+  )
   const selectedClientObligationRows = selectedClientCargoEntries
     .reduce((map, entry) => {
       const key = entry.date
@@ -431,27 +465,39 @@ function App() {
   )
   const selectedClientOpeningPayable = selectedClient?.openingPayable || 0
   const selectedClientOpeningReceivable = selectedClient?.openingReceivable || 0
+  const selectedClientPreviousObligationAmount = selectedClientPreviousCargoEntries.reduce(
+    (sum, row) => sum + (row.clientTotalAmount || 0),
+    0,
+  )
+  const selectedClientPreviousPaidCarry = selectedClientPreviousPaymentHistory.reduce(
+    (sum, row) => sum + (row.amount || 0),
+    0,
+  )
+  const selectedClientOpeningBalance =
+    selectedClientOpeningPayable -
+    selectedClientOpeningReceivable +
+    selectedClientPreviousObligationAmount -
+    selectedClientPreviousPaidCarry
   const selectedClientPaidAmount = selectedClientPaymentHistory.reduce(
     (sum, row) => sum + (row.amount || 0),
     0,
   )
   const selectedClientRemainingDebt =
-    selectedClientObligationAmount +
-    selectedClientOpeningPayable -
-    selectedClientPaidAmount -
-    selectedClientOpeningReceivable
-  const filteredFactoryCargoEntries = cargoEntries.filter((entry) => {
-    const afterFrom = factoryFilters.from ? entry.date >= factoryFilters.from : true
-    const beforeTo = factoryFilters.to ? entry.date <= factoryFilters.to : true
-
-    return afterFrom && beforeTo
-  })
-  const filteredFactoryPaymentEntries = factoryPayments.filter((payment) => {
-    const afterFrom = factoryFilters.from ? payment.date >= factoryFilters.from : true
-    const beforeTo = factoryFilters.to ? payment.date <= factoryFilters.to : true
-
-    return afterFrom && beforeTo
-  })
+    selectedClientOpeningBalance +
+    selectedClientObligationAmount -
+    selectedClientPaidAmount
+  const filteredFactoryCargoEntries = cargoEntries.filter((entry) =>
+    isWithinDateRange(entry.date, factoryFilters.from, factoryFilters.to),
+  )
+  const filteredFactoryPaymentEntries = factoryPayments.filter((payment) =>
+    isWithinDateRange(payment.date, factoryFilters.from, factoryFilters.to),
+  )
+  const previousFactoryCargoEntries = cargoEntries.filter((entry) =>
+    factoryFilters.from ? entry.date < factoryFilters.from : false,
+  )
+  const previousFactoryPaymentEntries = factoryPayments.filter((payment) =>
+    factoryFilters.from ? payment.date < factoryFilters.from : false,
+  )
   const factorySummaryRows = factories
     .map((factory) => {
       const factoryCargoEntries = filteredFactoryCargoEntries.filter(
@@ -460,35 +506,51 @@ function App() {
       const factoryPaymentItems = filteredFactoryPaymentEntries.filter(
         (payment) => payment.factoryId === factory.id,
       )
-      const obligationAmount = factoryCargoEntries.reduce(
+      const previousCargoItems = previousFactoryCargoEntries.filter(
+        (entry) => entry.factoryId === factory.id,
+      )
+      const previousPaymentItems = previousFactoryPaymentEntries.filter(
+        (payment) => payment.factoryId === factory.id,
+      )
+      const periodObligationAmount = factoryCargoEntries.reduce(
         (sum, entry) => sum + (entry.totalAmount || 0),
         0,
       )
       const openingPayable = factory.openingPayable || 0
       const openingReceivable = factory.openingReceivable || 0
+      const previousObligationAmount = previousCargoItems.reduce(
+        (sum, entry) => sum + (entry.totalAmount || 0),
+        0,
+      )
       const netWeight = factoryCargoEntries.reduce(
         (sum, entry) => sum + (entry.netWeight || 0),
         0,
       )
       const deliveries = factoryCargoEntries.length
-      const paidAmount = factoryPaymentItems.reduce(
+      const previousPaidAmount = previousPaymentItems.reduce(
         (sum, payment) => sum + (payment.amount || 0),
         0,
       )
-      const totalPayable = obligationAmount + openingPayable
-      const totalReceivable = openingReceivable
-      const remainingDebt = totalPayable - (paidAmount + totalReceivable)
+      const periodPaidAmount = factoryPaymentItems.reduce(
+        (sum, payment) => sum + (payment.amount || 0),
+        0,
+      )
+      const openingBalance =
+        openingPayable -
+        openingReceivable +
+        previousObligationAmount -
+        previousPaidAmount
+      const remainingDebt = openingBalance + periodObligationAmount - periodPaidAmount
 
       return {
         factory,
         deliveries,
         netWeight,
-        obligationAmount,
+        obligationAmount: periodObligationAmount,
         openingPayable,
         openingReceivable,
-        totalPayable,
-        totalReceivable,
-        paidAmount,
+        openingBalance,
+        paidAmount: periodPaidAmount,
         remainingDebt,
       }
     })
@@ -497,16 +559,17 @@ function App() {
         row.deliveries > 0 ||
         row.paidAmount > 0 ||
         row.obligationAmount > 0 ||
+        row.openingBalance !== 0 ||
         row.openingPayable > 0 ||
         row.openingReceivable > 0,
     )
     .sort((first, second) => second.remainingDebt - first.remainingDebt)
   const totalFactoryObligationAmount = factorySummaryRows.reduce(
-    (sum, row) => sum + row.totalPayable,
+    (sum, row) => sum + row.obligationAmount,
     0,
   )
   const totalFactoryPaidAmount = factorySummaryRows.reduce(
-    (sum, row) => sum + row.paidAmount + row.totalReceivable,
+    (sum, row) => sum + row.paidAmount,
     0,
   )
   const totalFactoryRemainingDebt = factorySummaryRows.reduce(
@@ -519,7 +582,7 @@ function App() {
   )
   const selectedFactory =
     factories.find((factory) => factory.id === selectedFactoryId) || null
-  const selectedFactoryCargoEntries = cargoEntries
+  const selectedFactoryCargoEntries = filteredFactoryCargoEntries
     .filter((entry) => entry.factoryId === selectedFactoryId)
     .sort((first, second) => {
       if (first.date === second.date) {
@@ -528,24 +591,46 @@ function App() {
 
       return first.date < second.date ? 1 : -1
     })
+  const selectedFactoryPreviousCargoEntries = previousFactoryCargoEntries.filter(
+    (entry) => entry.factoryId === selectedFactoryId,
+  )
   const selectedFactoryPaymentHistory = factoryPayments
-    .filter((payment) => payment.factoryId === selectedFactoryId)
+    .filter(
+      (payment) =>
+        payment.factoryId === selectedFactoryId &&
+        isWithinDateRange(payment.date, factoryFilters.from, factoryFilters.to),
+    )
     .sort((first, second) => (first.date < second.date ? 1 : -1))
+  const selectedFactoryPreviousPaymentHistory = previousFactoryPaymentEntries.filter(
+    (payment) => payment.factoryId === selectedFactoryId,
+  )
   const selectedFactoryObligationAmount = selectedFactoryCargoEntries.reduce(
     (sum, row) => sum + (row.totalAmount || 0),
     0,
   )
   const selectedFactoryOpeningPayable = selectedFactory?.openingPayable || 0
   const selectedFactoryOpeningReceivable = selectedFactory?.openingReceivable || 0
+  const selectedFactoryPreviousObligationAmount = selectedFactoryPreviousCargoEntries.reduce(
+    (sum, row) => sum + (row.totalAmount || 0),
+    0,
+  )
+  const selectedFactoryPreviousPaidCarry = selectedFactoryPreviousPaymentHistory.reduce(
+    (sum, row) => sum + (row.amount || 0),
+    0,
+  )
+  const selectedFactoryOpeningBalance =
+    selectedFactoryOpeningPayable -
+    selectedFactoryOpeningReceivable +
+    selectedFactoryPreviousObligationAmount -
+    selectedFactoryPreviousPaidCarry
   const selectedFactoryPaidAmount = selectedFactoryPaymentHistory.reduce(
     (sum, row) => sum + (row.amount || 0),
     0,
   )
   const selectedFactoryRemainingDebt =
-    selectedFactoryObligationAmount +
-    selectedFactoryOpeningPayable -
-    selectedFactoryPaidAmount -
-    selectedFactoryOpeningReceivable
+    selectedFactoryOpeningBalance +
+    selectedFactoryObligationAmount -
+    selectedFactoryPaidAmount
   const factoryPaymentUsdValue = parseNumber(factoryPaymentUsd)
   const factoryPaymentRateValue = parseNumber(factoryPaymentRate)
   const factoryPaymentCalculatedAmount =
@@ -1400,15 +1485,10 @@ function App() {
       {
         Klent: selectedClient.name,
         Telefon: selectedClient.phone || '-',
-        "Boshlang'ich biz unga qarzmiz": Math.round(selectedClientOpeningPayable),
-        "Boshlang'ich u bizga qarz": Math.round(selectedClientOpeningReceivable),
-        "Berish kerak": Math.round(
-          selectedClientObligationAmount + selectedClientOpeningPayable,
-        ),
-        Berganmiz: Math.round(
-          selectedClientPaidAmount + selectedClientOpeningReceivable,
-        ),
-        "Qolgan qarz": Math.round(selectedClientRemainingDebt),
+        "Boshlang'ich saldo": Math.round(selectedClientOpeningBalance),
+        "Davr qarz": Math.round(selectedClientObligationAmount),
+        "Davr to'lov": Math.round(selectedClientPaidAmount),
+        "Yakuniy saldo": Math.round(selectedClientRemainingDebt),
       },
     ]
     const obligationRows = [
@@ -1420,7 +1500,7 @@ function App() {
               "Yuk kg": '-',
               "To'lov kg": '-',
               Qarz: Math.round(
-                selectedClientOpeningPayable - selectedClientOpeningReceivable,
+                selectedClientOpeningBalance,
               ),
             },
           ]
@@ -1466,15 +1546,10 @@ function App() {
     const summaryRows = [
       {
         Zavod: selectedFactory.name,
-        "Boshlang'ich biz unga qarzmiz": Math.round(selectedFactoryOpeningPayable),
-        "Boshlang'ich u bizga qarz": Math.round(selectedFactoryOpeningReceivable),
-        "Berishi kerak": Math.round(
-          selectedFactoryObligationAmount + selectedFactoryOpeningPayable,
-        ),
-        Bergan: Math.round(
-          selectedFactoryPaidAmount + selectedFactoryOpeningReceivable,
-        ),
-        "Qolgan pul": Math.round(selectedFactoryRemainingDebt),
+        "Boshlang'ich saldo": Math.round(selectedFactoryOpeningBalance),
+        "Davr qarz": Math.round(selectedFactoryObligationAmount),
+        "Davr to'lov": Math.round(selectedFactoryPaidAmount),
+        "Yakuniy saldo": Math.round(selectedFactoryRemainingDebt),
       },
     ]
     const cargoRows = [
@@ -1485,7 +1560,7 @@ function App() {
               Mashina: '-',
               "Sof kg": '-',
               "Bizning pul": Math.round(
-                selectedFactoryOpeningPayable - selectedFactoryOpeningReceivable,
+                selectedFactoryOpeningBalance,
               ),
             },
           ]
@@ -2180,27 +2255,19 @@ function App() {
 
                     <div className="client-detail-stats">
                       <div>
-                        <span>Berish kerak</span>
-                        <strong>
-                          {formatMoney(
-                            selectedClientObligationAmount +
-                              selectedClientOpeningPayable,
-                          )}{' '}
-                          so'm
-                        </strong>
+                        <span>Boshlang'ich saldo</span>
+                        <strong>{formatMoney(selectedClientOpeningBalance)} so'm</strong>
                       </div>
                       <div>
-                        <span>Berganmiz</span>
-                        <strong>
-                          {formatMoney(
-                            selectedClientPaidAmount +
-                              selectedClientOpeningReceivable,
-                          )}{' '}
-                          so'm
-                        </strong>
+                        <span>Davr qarz</span>
+                        <strong>{formatMoney(selectedClientObligationAmount)} so'm</strong>
                       </div>
                       <div>
-                        <span>Qolgan qarz</span>
+                        <span>Davr to'lov</span>
+                        <strong>{formatMoney(selectedClientPaidAmount)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>Yakuniy saldo</span>
                         <strong>{formatMoney(selectedClientRemainingDebt)} so'm</strong>
                       </div>
                     </div>
@@ -2275,8 +2342,7 @@ function App() {
                                   <td>-</td>
                                   <td>
                                     {formatMoney(
-                                      selectedClientOpeningPayable -
-                                        selectedClientOpeningReceivable,
+                                      selectedClientOpeningBalance,
                                     )}{' '}
                                     so'm
                                   </td>
@@ -2602,27 +2668,19 @@ function App() {
 
                     <div className="client-detail-stats">
                       <div>
-                        <span>Berishi kerak</span>
-                        <strong>
-                          {formatMoney(
-                            selectedFactoryObligationAmount +
-                              selectedFactoryOpeningPayable,
-                          )}{' '}
-                          so'm
-                        </strong>
+                        <span>Boshlang'ich saldo</span>
+                        <strong>{formatMoney(selectedFactoryOpeningBalance)} so'm</strong>
                       </div>
                       <div>
-                        <span>Bergan</span>
-                        <strong>
-                          {formatMoney(
-                            selectedFactoryPaidAmount +
-                              selectedFactoryOpeningReceivable,
-                          )}{' '}
-                          so'm
-                        </strong>
+                        <span>Davr qarz</span>
+                        <strong>{formatMoney(selectedFactoryObligationAmount)} so'm</strong>
                       </div>
                       <div>
-                        <span>Qolgan pul</span>
+                        <span>Davr to'lov</span>
+                        <strong>{formatMoney(selectedFactoryPaidAmount)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>Yakuniy saldo</span>
                         <strong>{formatMoney(selectedFactoryRemainingDebt)} so'm</strong>
                       </div>
                     </div>
@@ -2728,8 +2786,7 @@ function App() {
                                   <td>-</td>
                                   <td>
                                     {formatMoney(
-                                      selectedFactoryOpeningPayable -
-                                        selectedFactoryOpeningReceivable,
+                                      selectedFactoryOpeningBalance,
                                     )}{' '}
                                     so'm
                                   </td>
