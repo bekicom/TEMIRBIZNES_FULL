@@ -31,6 +31,30 @@ const getAllowedOrigins = () => {
     .filter(Boolean);
 };
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) {
+    return true;
+  }
+
+  if (/^http:\/\/localhost:\d+$/.test(origin)) {
+    return true;
+  }
+
+  if (/^https:\/\/localhost:\d+$/.test(origin)) {
+    return true;
+  }
+
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) {
+    return true;
+  }
+
+  if (/^https:\/\/[a-z0-9-]+-[a-z0-9-]+-bekicoms-projects\.vercel\.app$/i.test(origin)) {
+    return true;
+  }
+
+  return getAllowedOrigins().includes(origin);
+};
+
 const toClientItem = (item) => {
   const { _id, ...rest } = item;
 
@@ -90,19 +114,7 @@ const createApp = () => {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin) {
-          return callback(null, true);
-        }
-
-        if (/^http:\/\/localhost:\d+$/.test(origin)) {
-          return callback(null, true);
-        }
-
-        if (/^https:\/\/localhost:\d+$/.test(origin)) {
-          return callback(null, true);
-        }
-
-        if (getAllowedOrigins().includes(origin)) {
+        if (isAllowedOrigin(origin)) {
           return callback(null, true);
         }
 
