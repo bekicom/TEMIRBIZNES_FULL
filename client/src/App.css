@@ -967,6 +967,17 @@ body {
   line-height: 1.2;
 }
 
+.detail-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.detail-filter-bar .mini-date-field {
+  min-width: 160px;
+}
+
 .client-payment-form {
   display: grid;
   grid-template-columns: 150px 180px minmax(0, 1fr) 120px;

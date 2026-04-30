@@ -2272,6 +2272,35 @@ function App() {
                       </div>
                     </div>
 
+                    <div className="detail-filter-bar">
+                      <label className="mini-date-field">
+                        Dan
+                        <input
+                          type="date"
+                          value={clientFilters.from}
+                          onChange={(event) =>
+                            setClientFilters((filters) => ({
+                              ...filters,
+                              from: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="mini-date-field">
+                        Gacha
+                        <input
+                          type="date"
+                          value={clientFilters.to}
+                          onChange={(event) =>
+                            setClientFilters((filters) => ({
+                              ...filters,
+                              to: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+
                     <form className="client-payment-form" onSubmit={handleCreateClientPayment}>
                       <label>
                         Sana
@@ -2683,6 +2712,35 @@ function App() {
                         <span>Yakuniy saldo</span>
                         <strong>{formatMoney(selectedFactoryRemainingDebt)} so'm</strong>
                       </div>
+                    </div>
+
+                    <div className="detail-filter-bar">
+                      <label className="mini-date-field">
+                        Dan
+                        <input
+                          type="date"
+                          value={factoryFilters.from}
+                          onChange={(event) =>
+                            setFactoryFilters((filters) => ({
+                              ...filters,
+                              from: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="mini-date-field">
+                        Gacha
+                        <input
+                          type="date"
+                          value={factoryFilters.to}
+                          onChange={(event) =>
+                            setFactoryFilters((filters) => ({
+                              ...filters,
+                              to: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
                     </div>
 
                     <form
