@@ -79,13 +79,19 @@ const API_BASE_URL =
     : 'https://temirbiznes-api.vercel.app')
 
 const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  })
+  let response
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    })
+  } catch (error) {
+    throw new Error('Server bilan aloqa uzildi')
+  }
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
@@ -846,6 +852,18 @@ function App() {
       setDailyExpenseError('')
     }
   }, [summaryDate, summaryDailyExpense])
+
+  useEffect(() => {
+    if (!dataError) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setDataError('')
+    }, 3500)
+
+    return () => window.clearTimeout(timer)
+  }, [dataError])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
