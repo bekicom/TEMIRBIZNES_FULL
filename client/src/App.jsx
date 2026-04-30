@@ -40,6 +40,10 @@ const formatWeight = (value) =>
 const formatMoney = (value) =>
   Math.round(value).toLocaleString('ru-RU')
 
+const formatMoneyText = (value) => `${formatMoney(value)} so'm`
+
+const formatWeightText = (value) => `${formatWeight(value)} kg`
+
 const isWithinDateRange = (date, from, to) => {
   const afterFrom = from ? date >= from : true
   const beforeTo = to ? date <= to : true
@@ -1495,44 +1499,46 @@ function App() {
 
     const workbook = XLSX.utils.book_new()
     const reportRows = [
-      ['Klent', selectedClient.name],
-      ['Telefon', selectedClient.phone || '-'],
-      ['Dan', clientFilters.from || '-'],
-      ['Gacha', clientFilters.to || '-'],
+      ['KLENT BILAN AKTSVERKA'],
       [],
-      ["Boshlang'ich saldo", Math.round(selectedClientOpeningBalance)],
-      ['Davr qarz', Math.round(selectedClientObligationAmount)],
-      ["Davr to'lov", Math.round(selectedClientPaidAmount)],
-      ['Yakuniy saldo', Math.round(selectedClientRemainingDebt)],
+      ['Klent ismi', selectedClient.name],
+      ['Telefon raqami', selectedClient.phone || '-'],
+      ['Hisobot boshi', clientFilters.from || 'Barcha davr'],
+      ['Hisobot oxiri', clientFilters.to || 'Barcha davr'],
       [],
-      ['Qarzlar'],
-      ['Sana', 'Topshirish', 'Yuk kg', "To'lov kg", 'Qarz'],
+      ['Boshlang‘ich qoldiq', formatMoneyText(selectedClientOpeningBalance)],
+      ['Shu davrda olingan yuklar summasi', formatMoneyText(selectedClientObligationAmount)],
+      ['Shu davrda berilgan pullar', formatMoneyText(selectedClientPaidAmount)],
+      ['Davr oxiridagi qoldiq', formatMoneyText(selectedClientRemainingDebt)],
+      [],
+      ['1. YUKLAR BO‘YICHA HISOB'],
+      ['Sana', 'Topshirish soni', 'Yuk og‘irligi', "Hisob kg", 'Summa'],
       ...(selectedClientOpeningPayable || selectedClientOpeningReceivable
         ? [[
-            "Boshlang'ich",
-            '-',
-            '-',
-            '-',
-            Math.round(selectedClientOpeningBalance),
+            "Boshlang‘ich qoldiq",
+            '',
+            '',
+            '',
+            formatMoneyText(selectedClientOpeningBalance),
           ]]
         : []),
       ...selectedClientObligationList.map((row) => [
         row.date,
         row.deliveries,
-        Number(row.cargoWeight.toFixed(1)),
-        Number(row.payWeight.toFixed(1)),
-        Math.round(row.obligationAmount),
+        formatWeightText(row.cargoWeight),
+        formatWeightText(row.payWeight),
+        formatMoneyText(row.obligationAmount),
       ]),
-      ...(selectedClientObligationList.length ? [] : [['Yozuv yo‘q', '-', '-', '-', 0]]),
+      ...(selectedClientObligationList.length ? [] : [['Yozuv yo‘q', '', '', '', '']]),
       [],
-      ["To'lovlar"],
-      ['Sana', 'Summa', 'Izoh'],
+      ['2. TO‘LOVLAR TARIXI'],
+      ['Sana', 'Berilgan summa', 'Izoh'],
       ...selectedClientPaymentHistory.map((row) => [
         row.date,
-        Math.round(row.amount || 0),
+        formatMoneyText(row.amount || 0),
         row.note || '-',
       ]),
-      ...(selectedClientPaymentHistory.length ? [] : [['Yozuv yo‘q', 0, '-']]),
+      ...(selectedClientPaymentHistory.length ? [] : [['Yozuv yo‘q', '', '-']]),
     ]
     const summaryRows = [
       {
@@ -1605,43 +1611,45 @@ function App() {
 
     const workbook = XLSX.utils.book_new()
     const reportRows = [
-      ['Zavod', selectedFactory.name],
-      ['Dan', factoryFilters.from || '-'],
-      ['Gacha', factoryFilters.to || '-'],
+      ['ZAVOD BILAN AKTSVERKA'],
       [],
-      ["Boshlang'ich saldo", Math.round(selectedFactoryOpeningBalance)],
-      ['Davr qarz', Math.round(selectedFactoryObligationAmount)],
-      ["Davr to'lov", Math.round(selectedFactoryPaidAmount)],
-      ['Yakuniy saldo', Math.round(selectedFactoryRemainingDebt)],
+      ['Zavod nomi', selectedFactory.name],
+      ['Hisobot boshi', factoryFilters.from || 'Barcha davr'],
+      ['Hisobot oxiri', factoryFilters.to || 'Barcha davr'],
       [],
-      ['Yuklar'],
-      ['Sana', 'Mashina', 'Sof kg', 'Bizning pul'],
+      ['Boshlang‘ich qoldiq', formatMoneyText(selectedFactoryOpeningBalance)],
+      ['Shu davrda topshirilgan yuklar summasi', formatMoneyText(selectedFactoryObligationAmount)],
+      ['Shu davrda zavod to‘lagan pul', formatMoneyText(selectedFactoryPaidAmount)],
+      ['Davr oxiridagi qoldiq', formatMoneyText(selectedFactoryRemainingDebt)],
+      [],
+      ['1. YUKLAR BO‘YICHA HISOB'],
+      ['Sana', 'Mashina', 'Sof kg', 'Summa'],
       ...(selectedFactoryOpeningPayable || selectedFactoryOpeningReceivable
         ? [[
-            "Boshlang'ich",
-            '-',
-            '-',
-            Math.round(selectedFactoryOpeningBalance),
+            "Boshlang‘ich qoldiq",
+            '',
+            '',
+            formatMoneyText(selectedFactoryOpeningBalance),
           ]]
         : []),
       ...selectedFactoryCargoEntries.map((row) => [
         row.date,
         row.carNumber,
-        Number((row.netWeight || 0).toFixed(1)),
-        Math.round(row.totalAmount || 0),
+        formatWeightText(row.netWeight || 0),
+        formatMoneyText(row.totalAmount || 0),
       ]),
-      ...(selectedFactoryCargoEntries.length ? [] : [['Yozuv yo‘q', '-', '-', 0]]),
+      ...(selectedFactoryCargoEntries.length ? [] : [['Yozuv yo‘q', '', '', '']]),
       [],
-      ["To'lovlar"],
-      ['Sana', 'USD', 'Kurs', 'Summa', 'Izoh'],
+      ['2. TO‘LOVLAR TARIXI'],
+      ['Sana', 'USD', 'Kurs', 'So‘mga aylangan summa', 'Izoh'],
       ...selectedFactoryPaymentHistory.map((row) => [
         row.date,
-        row.usdAmount || 0,
-        row.exchangeRate || 0,
-        Math.round(row.amount || 0),
+        row.usdAmount ? `${formatMoney(row.usdAmount)} $` : '-',
+        row.exchangeRate ? formatMoney(row.exchangeRate) : '-',
+        formatMoneyText(row.amount || 0),
         row.note || '-',
       ]),
-      ...(selectedFactoryPaymentHistory.length ? [] : [['Yozuv yo‘q', 0, 0, 0, '-']]),
+      ...(selectedFactoryPaymentHistory.length ? [] : [['Yozuv yo‘q', '', '', '', '-']]),
     ]
     const summaryRows = [
       {
