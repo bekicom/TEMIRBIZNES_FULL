@@ -1,14 +1,8 @@
 {
   "version": 2,
   "functions": {
-    "api/[...slug].js": {
+    "api/[[...slug]].js": {
       "maxDuration": 10
     }
-  },
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/[...slug].js"
-    }
-  ]
+  }
 }
