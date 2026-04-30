@@ -51,6 +51,14 @@ const isWithinDateRange = (date, from, to) => {
   return afterFrom && beforeTo
 }
 
+const normalizeClientKey = (client) =>
+  `${String(client?.name || '').trim().toLowerCase()}::${String(client?.phone || '')
+    .trim()
+    .toLowerCase()}`
+
+const normalizeFactoryKey = (factory) =>
+  String(factory?.name || '').trim().toLowerCase()
+
 const autosizeWorksheetColumns = (worksheet, rows) => {
   const widths = rows.reduce((result, row) => {
     row.forEach((cell, index) => {
@@ -355,26 +363,41 @@ function App() {
 
     return first.date < second.date ? 1 : -1
   })
-  const clientSummaryRows = clients
-    .map((client) => {
-      const clientCargoEntries = filteredClientCargoEntries.filter(
-        (entry) => entry.clientId === client.id,
+  const clientGroups = clients.reduce((map, client) => {
+    const key = normalizeClientKey(client)
+    const currentGroup = map.get(key) || []
+    currentGroup.push(client)
+    map.set(key, currentGroup)
+    return map
+  }, new Map())
+  const clientSummaryRows = [...clientGroups.values()]
+    .map((groupClients) => {
+      const groupIds = groupClients.map((client) => client.id)
+      const primaryClient = groupClients[0]
+      const clientCargoEntries = filteredClientCargoEntries.filter((entry) =>
+        groupIds.includes(entry.clientId),
       )
-      const clientPaymentItems = filteredClientPaymentEntries.filter(
-        (payment) => payment.clientId === client.id,
+      const clientPaymentItems = filteredClientPaymentEntries.filter((payment) =>
+        groupIds.includes(payment.clientId),
       )
-      const previousCargoItems = previousClientCargoEntries.filter(
-        (entry) => entry.clientId === client.id,
+      const previousCargoItems = previousClientCargoEntries.filter((entry) =>
+        groupIds.includes(entry.clientId),
       )
-      const previousPaymentItems = previousClientPaymentEntries.filter(
-        (payment) => payment.clientId === client.id,
+      const previousPaymentItems = previousClientPaymentEntries.filter((payment) =>
+        groupIds.includes(payment.clientId),
       )
       const periodObligationAmount = clientCargoEntries.reduce(
         (sum, entry) => sum + (entry.clientTotalAmount || 0),
         0,
       )
-      const openingPayable = client.openingPayable || 0
-      const openingReceivable = client.openingReceivable || 0
+      const openingPayable = groupClients.reduce(
+        (sum, client) => sum + (client.openingPayable || 0),
+        0,
+      )
+      const openingReceivable = groupClients.reduce(
+        (sum, client) => sum + (client.openingReceivable || 0),
+        0,
+      )
       const previousObligationAmount = previousCargoItems.reduce(
         (sum, entry) => sum + (entry.clientTotalAmount || 0),
         0,
@@ -400,7 +423,8 @@ function App() {
       const remainingDebt = openingBalance + periodObligationAmount - periodPaidAmount
 
       return {
-        client,
+        client: primaryClient,
+        groupIds,
         deliveries,
         payWeight,
         obligationAmount: periodObligationAmount,
@@ -438,21 +462,26 @@ function App() {
     0,
   )
   const selectedClient = clients.find((client) => client.id === selectedClientId) || null
-  const selectedClientCargoEntries = filteredClientCargoEntries.filter(
-    (entry) => entry.clientId === selectedClientId,
+  const selectedClientGroupIds = selectedClient
+    ? (clientGroups.get(normalizeClientKey(selectedClient)) || [selectedClient]).map(
+        (client) => client.id,
+      )
+    : []
+  const selectedClientCargoEntries = filteredClientCargoEntries.filter((entry) =>
+    selectedClientGroupIds.includes(entry.clientId),
   )
-  const selectedClientPreviousCargoEntries = previousClientCargoEntries.filter(
-    (entry) => entry.clientId === selectedClientId,
+  const selectedClientPreviousCargoEntries = previousClientCargoEntries.filter((entry) =>
+    selectedClientGroupIds.includes(entry.clientId),
   )
   const selectedClientPaymentHistory = clientPayments
     .filter(
       (payment) =>
-        payment.clientId === selectedClientId &&
+        selectedClientGroupIds.includes(payment.clientId) &&
         isWithinDateRange(payment.date, clientFilters.from, clientFilters.to),
     )
     .sort((first, second) => (first.date < second.date ? 1 : -1))
   const selectedClientPreviousPaymentHistory = previousClientPaymentEntries.filter(
-    (payment) => payment.clientId === selectedClientId,
+    (payment) => selectedClientGroupIds.includes(payment.clientId),
   )
   const selectedClientObligationRows = selectedClientCargoEntries
     .reduce((map, entry) => {
@@ -480,8 +509,16 @@ function App() {
     (sum, row) => sum + row.obligationAmount,
     0,
   )
-  const selectedClientOpeningPayable = selectedClient?.openingPayable || 0
-  const selectedClientOpeningReceivable = selectedClient?.openingReceivable || 0
+  const selectedClientOpeningPayable = selectedClientGroupIds.length
+    ? clients
+        .filter((client) => selectedClientGroupIds.includes(client.id))
+        .reduce((sum, client) => sum + (client.openingPayable || 0), 0)
+    : 0
+  const selectedClientOpeningReceivable = selectedClientGroupIds.length
+    ? clients
+        .filter((client) => selectedClientGroupIds.includes(client.id))
+        .reduce((sum, client) => sum + (client.openingReceivable || 0), 0)
+    : 0
   const selectedClientPreviousObligationAmount = selectedClientPreviousCargoEntries.reduce(
     (sum, row) => sum + (row.clientTotalAmount || 0),
     0,
@@ -515,26 +552,41 @@ function App() {
   const previousFactoryPaymentEntries = factoryPayments.filter((payment) =>
     factoryFilters.from ? payment.date < factoryFilters.from : false,
   )
-  const factorySummaryRows = factories
-    .map((factory) => {
-      const factoryCargoEntries = filteredFactoryCargoEntries.filter(
-        (entry) => entry.factoryId === factory.id,
+  const factoryGroups = factories.reduce((map, factory) => {
+    const key = normalizeFactoryKey(factory)
+    const currentGroup = map.get(key) || []
+    currentGroup.push(factory)
+    map.set(key, currentGroup)
+    return map
+  }, new Map())
+  const factorySummaryRows = [...factoryGroups.values()]
+    .map((groupFactories) => {
+      const groupIds = groupFactories.map((factory) => factory.id)
+      const primaryFactory = groupFactories[0]
+      const factoryCargoEntries = filteredFactoryCargoEntries.filter((entry) =>
+        groupIds.includes(entry.factoryId),
       )
-      const factoryPaymentItems = filteredFactoryPaymentEntries.filter(
-        (payment) => payment.factoryId === factory.id,
+      const factoryPaymentItems = filteredFactoryPaymentEntries.filter((payment) =>
+        groupIds.includes(payment.factoryId),
       )
-      const previousCargoItems = previousFactoryCargoEntries.filter(
-        (entry) => entry.factoryId === factory.id,
+      const previousCargoItems = previousFactoryCargoEntries.filter((entry) =>
+        groupIds.includes(entry.factoryId),
       )
-      const previousPaymentItems = previousFactoryPaymentEntries.filter(
-        (payment) => payment.factoryId === factory.id,
+      const previousPaymentItems = previousFactoryPaymentEntries.filter((payment) =>
+        groupIds.includes(payment.factoryId),
       )
       const periodObligationAmount = factoryCargoEntries.reduce(
         (sum, entry) => sum + (entry.totalAmount || 0),
         0,
       )
-      const openingPayable = factory.openingPayable || 0
-      const openingReceivable = factory.openingReceivable || 0
+      const openingPayable = groupFactories.reduce(
+        (sum, factory) => sum + (factory.openingPayable || 0),
+        0,
+      )
+      const openingReceivable = groupFactories.reduce(
+        (sum, factory) => sum + (factory.openingReceivable || 0),
+        0,
+      )
       const previousObligationAmount = previousCargoItems.reduce(
         (sum, entry) => sum + (entry.totalAmount || 0),
         0,
@@ -560,7 +612,8 @@ function App() {
       const remainingDebt = openingBalance + periodObligationAmount - periodPaidAmount
 
       return {
-        factory,
+        factory: primaryFactory,
+        groupIds,
         deliveries,
         netWeight,
         obligationAmount: periodObligationAmount,
@@ -599,8 +652,13 @@ function App() {
   )
   const selectedFactory =
     factories.find((factory) => factory.id === selectedFactoryId) || null
+  const selectedFactoryGroupIds = selectedFactory
+    ? (factoryGroups.get(normalizeFactoryKey(selectedFactory)) || [selectedFactory]).map(
+        (factory) => factory.id,
+      )
+    : []
   const selectedFactoryCargoEntries = filteredFactoryCargoEntries
-    .filter((entry) => entry.factoryId === selectedFactoryId)
+    .filter((entry) => selectedFactoryGroupIds.includes(entry.factoryId))
     .sort((first, second) => {
       if (first.date === second.date) {
         return second.totalAmount - first.totalAmount
@@ -608,25 +666,33 @@ function App() {
 
       return first.date < second.date ? 1 : -1
     })
-  const selectedFactoryPreviousCargoEntries = previousFactoryCargoEntries.filter(
-    (entry) => entry.factoryId === selectedFactoryId,
+  const selectedFactoryPreviousCargoEntries = previousFactoryCargoEntries.filter((entry) =>
+    selectedFactoryGroupIds.includes(entry.factoryId),
   )
   const selectedFactoryPaymentHistory = factoryPayments
     .filter(
       (payment) =>
-        payment.factoryId === selectedFactoryId &&
+        selectedFactoryGroupIds.includes(payment.factoryId) &&
         isWithinDateRange(payment.date, factoryFilters.from, factoryFilters.to),
     )
     .sort((first, second) => (first.date < second.date ? 1 : -1))
   const selectedFactoryPreviousPaymentHistory = previousFactoryPaymentEntries.filter(
-    (payment) => payment.factoryId === selectedFactoryId,
+    (payment) => selectedFactoryGroupIds.includes(payment.factoryId),
   )
   const selectedFactoryObligationAmount = selectedFactoryCargoEntries.reduce(
     (sum, row) => sum + (row.totalAmount || 0),
     0,
   )
-  const selectedFactoryOpeningPayable = selectedFactory?.openingPayable || 0
-  const selectedFactoryOpeningReceivable = selectedFactory?.openingReceivable || 0
+  const selectedFactoryOpeningPayable = selectedFactoryGroupIds.length
+    ? factories
+        .filter((factory) => selectedFactoryGroupIds.includes(factory.id))
+        .reduce((sum, factory) => sum + (factory.openingPayable || 0), 0)
+    : 0
+  const selectedFactoryOpeningReceivable = selectedFactoryGroupIds.length
+    ? factories
+        .filter((factory) => selectedFactoryGroupIds.includes(factory.id))
+        .reduce((sum, factory) => sum + (factory.openingReceivable || 0), 0)
+    : 0
   const selectedFactoryPreviousObligationAmount = selectedFactoryPreviousCargoEntries.reduce(
     (sum, row) => sum + (row.totalAmount || 0),
     0,
@@ -802,6 +868,7 @@ function App() {
       }
 
       localStorage.setItem('temir_user', JSON.stringify(data.user))
+      setDataError('')
       setUser(data.user)
     } catch (err) {
       setError(err.message)
@@ -813,6 +880,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('temir_user')
     setUser(null)
+    setDataError('')
   }
 
   const createItem = async (route, payload, setItems) => {
@@ -822,6 +890,7 @@ function App() {
     })
 
     setItems((items) => [item, ...items])
+    setDataError('')
     return item
   }
 
@@ -834,6 +903,7 @@ function App() {
     setItems((items) =>
       items.map((currentItem) => (currentItem.id === itemId ? item : currentItem)),
     )
+    setDataError('')
     return item
   }
 
@@ -843,6 +913,7 @@ function App() {
     })
 
     setItems((items) => items.filter((item) => item.id !== itemId))
+    setDataError('')
   }
 
   const handleCreateCar = async (event) => {
@@ -1841,6 +1912,7 @@ function App() {
   }
 
   const handleChangePage = (page) => {
+    setDataError('')
     setActivePage(page)
     setMobileMenuOpen(false)
   }
