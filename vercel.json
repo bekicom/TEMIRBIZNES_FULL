@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/[...slug].js": {
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ]
+}
