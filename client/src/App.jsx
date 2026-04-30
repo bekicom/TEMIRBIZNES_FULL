@@ -257,6 +257,16 @@ function App() {
     return afterFrom && beforeTo
   })
   const displayedCargoEntries = hasDateFilter ? filteredCargoEntries : cargoEntries
+  const hasLoadedBusinessData =
+    cars.length > 0 ||
+    clients.length > 0 ||
+    factories.length > 0 ||
+    cargoEntries.length > 0 ||
+    expenses.length > 0 ||
+    dailyExpenses.length > 0 ||
+    clientPayments.length > 0 ||
+    factoryPayments.length > 0
+  const shouldShowGlobalDataError = Boolean(dataError) && (!hasLoadedBusinessData || dataLoading)
   const summaryCargoEntries = hasDateFilter
     ? filteredCargoEntries
     : defaultSummaryCargoEntries
@@ -854,6 +864,10 @@ function App() {
   }, [summaryDate, summaryDailyExpense])
 
   useEffect(() => {
+    setDataError('')
+  }, [activePage])
+
+  useEffect(() => {
     if (!dataError) {
       return undefined
     }
@@ -952,6 +966,7 @@ function App() {
   }
 
   const handleStartEdit = (car) => {
+    setDataError('')
     setEditingCarId(car.id)
     setEditingNumber(car.number)
   }
@@ -1040,6 +1055,7 @@ function App() {
   }
 
   const handleOpenClientDetail = (clientId) => {
+    setDataError('')
     setSelectedClientId(clientId)
     setClientPaymentDate(getTodayDate())
     setClientPaymentAmount('')
@@ -1162,6 +1178,7 @@ function App() {
   }
 
   const handleStartEditFactory = (factory) => {
+    setDataError('')
     setEditingFactoryId(factory.id)
     setEditingFactoryName(factory.name)
     setEditingFactoryOpeningPayable(
@@ -1180,6 +1197,7 @@ function App() {
   }
 
   const handleOpenFactoryDetail = (factoryId) => {
+    setDataError('')
     setSelectedFactoryId(factoryId)
     setFactoryPaymentDate(getTodayDate())
     setFactoryPaymentUsd('')
@@ -1358,6 +1376,7 @@ function App() {
   }
 
   const handleEditExpense = (expense) => {
+    setDataError('')
     setEditingExpenseId(expense.id)
     setExpenseDate(expense.date || '')
     setExpenseAmount(formatNumberInput(String(expense.amount)))
@@ -1523,6 +1542,7 @@ function App() {
   }
 
   const handleEditCargo = (entry) => {
+    setDataError('')
     setEditingCargoId(entry.id)
     setCargoForm({
       date: entry.date,
@@ -2086,7 +2106,7 @@ function App() {
           {'>'}
         </button>
         <div className="white-page">
-          {dataError ? <p className="data-error">{dataError}</p> : null}
+          {shouldShowGlobalDataError ? <p className="data-error">{dataError}</p> : null}
           {dataLoading ? <p className="data-loading">Ma'lumotlar yuklanmoqda...</p> : null}
 
           {activePage === 'home' ? (
