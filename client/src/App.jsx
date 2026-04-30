@@ -1,14 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
 import './App.css'
 
 const emptyCargoForm = {
   date: '',
   carId: '',
+  clientId: '',
+  factoryId: '',
   grossWeight: '',
   emptyWeight: '',
   discountWeight: '',
+  transportCost: '',
   pricePerKg: '',
+  clientPricePerKg: '',
+  clientWeightMode: 'cargo',
 }
 
 const getTodayDate = () => {
@@ -20,13 +25,45 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`
 }
 
-const parseNumber = (value) => Number(String(value).replace(',', '.')) || 0
+const parseNumber = (value) =>
+  Number(String(value).replace(/\s/g, '').replace(',', '.')) || 0
+
+const formatNumberInput = (value) => {
+  const digits = value.replace(/\D/g, '')
+
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+}
 
 const formatWeight = (value) =>
   Number(value.toFixed(1)).toLocaleString('ru-RU').replace('.', ',')
 
 const formatMoney = (value) =>
   Math.round(value).toLocaleString('ru-RU')
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  `${window.location.protocol}//${window.location.hostname}:5000`
+
+const requestJson = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.message || 'Server bilan aloqa xatosi')
+  }
+
+  if (response.status === 204) {
+    return null
+  }
+
+  return response.json()
+}
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -36,21 +73,74 @@ function App() {
   const [login, setLogin] = useState('admin')
   const [password, setPassword] = useState('0000')
   const [error, setError] = useState('')
+  const [dataError, setDataError] = useState('')
+  const [dataLoading, setDataLoading] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [activePage, setActivePage] = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [carNumber, setCarNumber] = useState('')
-  const [cars, setCars] = useState(() => {
-    const savedCars = localStorage.getItem('temir_cars')
-    return savedCars ? JSON.parse(savedCars) : []
-  })
+  const [cars, setCars] = useState([])
   const [editingCarId, setEditingCarId] = useState(null)
   const [editingNumber, setEditingNumber] = useState('')
-  const [cargoForm, setCargoForm] = useState(emptyCargoForm)
-  const [cargoEntries, setCargoEntries] = useState(() => {
-    const savedCargoEntries = localStorage.getItem('temir_cargo_entries')
-    return savedCargoEntries ? JSON.parse(savedCargoEntries) : []
+  const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
+  const [clientOpeningPayable, setClientOpeningPayable] = useState('')
+  const [clientOpeningReceivable, setClientOpeningReceivable] = useState('')
+  const [clients, setClients] = useState([])
+  const [clientModalOpen, setClientModalOpen] = useState(false)
+  const [clientDetailModalOpen, setClientDetailModalOpen] = useState(false)
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [editingClientId, setEditingClientId] = useState(null)
+  const [editingClientName, setEditingClientName] = useState('')
+  const [editingClientPhone, setEditingClientPhone] = useState('')
+  const [editingClientOpeningPayable, setEditingClientOpeningPayable] = useState('')
+  const [editingClientOpeningReceivable, setEditingClientOpeningReceivable] = useState('')
+  const [clientFilters, setClientFilters] = useState({
+    from: '',
+    to: '',
   })
+  const [clientPayments, setClientPayments] = useState([])
+  const [clientPaymentDate, setClientPaymentDate] = useState(getTodayDate())
+  const [clientPaymentAmount, setClientPaymentAmount] = useState('')
+  const [clientPaymentNote, setClientPaymentNote] = useState('')
+  const [clientPaymentError, setClientPaymentError] = useState('')
+  const [factoryName, setFactoryName] = useState('')
+  const [factoryOpeningPayable, setFactoryOpeningPayable] = useState('')
+  const [factoryOpeningReceivable, setFactoryOpeningReceivable] = useState('')
+  const [factories, setFactories] = useState([])
+  const [factoryModalOpen, setFactoryModalOpen] = useState(false)
+  const [factoryDetailModalOpen, setFactoryDetailModalOpen] = useState(false)
+  const [selectedFactoryId, setSelectedFactoryId] = useState('')
+  const [editingFactoryId, setEditingFactoryId] = useState(null)
+  const [editingFactoryName, setEditingFactoryName] = useState('')
+  const [editingFactoryOpeningPayable, setEditingFactoryOpeningPayable] = useState('')
+  const [editingFactoryOpeningReceivable, setEditingFactoryOpeningReceivable] = useState('')
+  const [factoryFilters, setFactoryFilters] = useState({
+    from: '',
+    to: '',
+  })
+  const [factoryPayments, setFactoryPayments] = useState([])
+  const [factoryPaymentDate, setFactoryPaymentDate] = useState(getTodayDate())
+  const [factoryPaymentUsd, setFactoryPaymentUsd] = useState('')
+  const [factoryPaymentRate, setFactoryPaymentRate] = useState('')
+  const [factoryPaymentAmount, setFactoryPaymentAmount] = useState('')
+  const [factoryPaymentNote, setFactoryPaymentNote] = useState('')
+  const [factoryPaymentError, setFactoryPaymentError] = useState('')
+  const [expenseDate, setExpenseDate] = useState('')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseReason, setExpenseReason] = useState('')
+  const [expenseError, setExpenseError] = useState('')
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
+  const [editingExpenseId, setEditingExpenseId] = useState(null)
+  const [expenses, setExpenses] = useState([])
+  const [dailyExpenses, setDailyExpenses] = useState([])
+  const [dailyExpenseInput, setDailyExpenseInput] = useState('')
+  const [dailyExpenseEditing, setDailyExpenseEditing] = useState(false)
+  const [dailyExpenseSaving, setDailyExpenseSaving] = useState(false)
+  const [dailyExpenseError, setDailyExpenseError] = useState('')
+  const [cargoForm, setCargoForm] = useState(emptyCargoForm)
+  const [cargoEntries, setCargoEntries] = useState([])
   const [editingCargoId, setEditingCargoId] = useState(null)
   const [cargoError, setCargoError] = useState('')
   const [dashboardFilters, setDashboardFilters] = useState({
@@ -63,19 +153,32 @@ function App() {
   const cargoWeight = Math.max(grossWeight - emptyWeight, 0)
   const discountWeight = parseNumber(cargoForm.discountWeight)
   const netWeight = Math.max(cargoWeight - discountWeight, 0)
+  const transportCost = parseNumber(cargoForm.transportCost)
   const pricePerKg = parseNumber(cargoForm.pricePerKg)
   const totalAmount = netWeight * pricePerKg
+  const clientPricePerKg = parseNumber(cargoForm.clientPricePerKg)
+  const clientWeightMode = cargoForm.clientWeightMode || 'cargo'
+  const clientPayWeight = clientWeightMode === 'net' ? netWeight : cargoWeight
+  const clientTotalAmount = clientPayWeight * clientPricePerKg
+  const profitAmount = totalAmount - clientTotalAmount - transportCost
   const todayDate = getTodayDate()
-  const todayCargoEntries = cargoEntries.filter(
-    (entry) => entry.date === todayDate,
+  const hasDateFilter = Boolean(dashboardFilters.from || dashboardFilters.to)
+  const latestCargoDate = cargoEntries.reduce(
+    (latestDate, entry) => (entry.date > latestDate ? entry.date : latestDate),
+    '',
   )
-  const todayTotalKg = todayCargoEntries.reduce(
-    (sum, entry) => sum + entry.netWeight,
-    0,
-  )
-  const todayTotalAmount = todayCargoEntries.reduce(
-    (sum, entry) => sum + entry.totalAmount,
-    0,
+  const defaultSummaryDate = cargoEntries.some((entry) => entry.date === todayDate)
+    ? todayDate
+    : latestCargoDate
+  const singleFilteredDate =
+    dashboardFilters.from &&
+    dashboardFilters.to &&
+    dashboardFilters.from === dashboardFilters.to
+      ? dashboardFilters.from
+      : ''
+  const summaryDate = singleFilteredDate || defaultSummaryDate
+  const defaultSummaryCargoEntries = cargoEntries.filter(
+    (entry) => entry.date === defaultSummaryDate,
   )
   const filteredCargoEntries = cargoEntries.filter((entry) => {
     const afterFrom = dashboardFilters.from
@@ -85,6 +188,76 @@ function App() {
 
     return afterFrom && beforeTo
   })
+  const filteredExpenses = expenses.filter((expense) => {
+    if (!expense.date) {
+      return !dashboardFilters.from && !dashboardFilters.to
+    }
+
+    const afterFrom = dashboardFilters.from
+      ? expense.date >= dashboardFilters.from
+      : true
+    const beforeTo = dashboardFilters.to
+      ? expense.date <= dashboardFilters.to
+      : true
+
+    return afterFrom && beforeTo
+  })
+  const filteredDailyExpenses = dailyExpenses.filter((expense) => {
+    if (!expense.date) {
+      return !dashboardFilters.from && !dashboardFilters.to
+    }
+
+    const afterFrom = dashboardFilters.from
+      ? expense.date >= dashboardFilters.from
+      : true
+    const beforeTo = dashboardFilters.to
+      ? expense.date <= dashboardFilters.to
+      : true
+
+    return afterFrom && beforeTo
+  })
+  const displayedCargoEntries = hasDateFilter ? filteredCargoEntries : cargoEntries
+  const summaryCargoEntries = hasDateFilter
+    ? filteredCargoEntries
+    : defaultSummaryCargoEntries
+  const summaryTotalKg = summaryCargoEntries.reduce(
+    (sum, entry) => sum + entry.netWeight,
+    0,
+  )
+  const summaryTotalAmount = summaryCargoEntries.reduce(
+    (sum, entry) => sum + entry.totalAmount,
+    0,
+  )
+  const summaryProfitAmount = summaryCargoEntries.reduce(
+    (sum, entry) => sum + (entry.profitAmount || 0),
+    0,
+  )
+  const summaryDailyExpense = hasDateFilter
+    ? filteredDailyExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+    : dailyExpenses.find((expense) => expense.date === summaryDate)?.amount || 0
+  const summaryNetProfitAmount = summaryProfitAmount - summaryDailyExpense
+  const summaryIsToday = !hasDateFilter && summaryDate === todayDate
+  const summaryKgLabel = summaryIsToday
+    ? 'Bugun qabul qilingan jami kg'
+    : hasDateFilter
+      ? 'Tanlangan oraliq jami kg'
+      : "Oxirgi sanadagi jami kg"
+  const summaryAmountLabel = summaryIsToday
+    ? 'Zavod bugun bergan pul'
+    : hasDateFilter
+      ? "Tanlangan oraliq zavod puli"
+      : "Oxirgi sanadagi zavod puli"
+  const summaryProfitLabel = summaryIsToday
+    ? 'Bugungi foyda'
+    : hasDateFilter
+      ? 'Tanlangan oraliq foyda'
+      : "Oxirgi sanadagi foyda"
+  const dashboardSummaryMoneyLabel = summaryIsToday
+    ? 'Bugungi tushum'
+    : "Oxirgi sanadagi tushum"
+  const dashboardSummaryKgLabel = summaryIsToday
+    ? 'Bugungi sof kg'
+    : "Oxirgi sanadagi sof kg"
   const totalNetKg = filteredCargoEntries.reduce(
     (sum, entry) => sum + entry.netWeight,
     0,
@@ -93,11 +266,362 @@ function App() {
     (sum, entry) => sum + entry.totalAmount,
     0,
   )
+  const totalExpenses = filteredExpenses.reduce(
+    (sum, expense) => sum + expense.amount,
+    0,
+  )
+  const totalDailyExpenses = filteredDailyExpenses.reduce(
+    (sum, expense) => sum + expense.amount,
+    0,
+  )
+  const totalCargoProfit = filteredCargoEntries.reduce(
+    (sum, entry) => sum + (entry.profitAmount || 0),
+    0,
+  )
+  const netProfit = totalCargoProfit - totalDailyExpenses - totalExpenses
+  const canEditDailyExpense = Boolean(summaryDate && (!hasDateFilter || singleFilteredDate))
   const totalCargoWeight = filteredCargoEntries.reduce(
     (sum, entry) => sum + entry.cargoWeight,
     0,
   )
   const averagePrice = totalNetKg ? totalAmountAll / totalNetKg : 0
+  const filteredClientCargoEntries = cargoEntries.filter((entry) => {
+    const afterFrom = clientFilters.from ? entry.date >= clientFilters.from : true
+    const beforeTo = clientFilters.to ? entry.date <= clientFilters.to : true
+
+    return afterFrom && beforeTo
+  })
+  const filteredClientPaymentEntries = clientPayments.filter((payment) => {
+    const afterFrom = clientFilters.from ? payment.date >= clientFilters.from : true
+    const beforeTo = clientFilters.to ? payment.date <= clientFilters.to : true
+
+    return afterFrom && beforeTo
+  })
+  const clientObligationRows = filteredClientCargoEntries.reduce((map, entry) => {
+    const key = `${entry.date}::${entry.clientId || entry.clientName}`
+    const currentRow = map.get(key) || {
+      key,
+      date: entry.date,
+      clientId: entry.clientId || '',
+      clientName: entry.clientName || '-',
+      clientPhone:
+        clients.find((client) => client.id === entry.clientId)?.phone || '',
+      deliveries: 0,
+      payWeight: 0,
+      clientPaymentAmount: 0,
+      factoryAmount: 0,
+      profitAmount: 0,
+    }
+
+    currentRow.deliveries += 1
+    currentRow.payWeight += entry.clientPayWeight || entry.cargoWeight || 0
+    currentRow.clientPaymentAmount += entry.clientTotalAmount || 0
+    currentRow.factoryAmount += entry.totalAmount || 0
+    currentRow.profitAmount += entry.profitAmount || 0
+
+    map.set(key, currentRow)
+    return map
+  }, new Map())
+  const clientObligationByDateRows = [...clientObligationRows.values()].sort((first, second) => {
+    if (first.date === second.date) {
+      return second.clientPaymentAmount - first.clientPaymentAmount
+    }
+
+    return first.date < second.date ? 1 : -1
+  })
+  const clientSummaryRows = clients
+    .map((client) => {
+      const clientCargoEntries = filteredClientCargoEntries.filter(
+        (entry) => entry.clientId === client.id,
+      )
+      const clientPaymentItems = filteredClientPaymentEntries.filter(
+        (payment) => payment.clientId === client.id,
+      )
+      const obligationAmount = clientCargoEntries.reduce(
+        (sum, entry) => sum + (entry.clientTotalAmount || 0),
+        0,
+      )
+      const openingPayable = client.openingPayable || 0
+      const openingReceivable = client.openingReceivable || 0
+      const payWeight = clientCargoEntries.reduce(
+        (sum, entry) => sum + (entry.clientPayWeight || entry.cargoWeight || 0),
+        0,
+      )
+      const deliveries = clientCargoEntries.length
+      const paidAmount = clientPaymentItems.reduce(
+        (sum, payment) => sum + (payment.amount || 0),
+        0,
+      )
+      const totalPayable = obligationAmount + openingPayable
+      const totalReceivable = openingReceivable
+      const remainingDebt = totalPayable - (paidAmount + totalReceivable)
+
+      return {
+        client,
+        deliveries,
+        payWeight,
+        obligationAmount,
+        openingPayable,
+        openingReceivable,
+        totalPayable,
+        totalReceivable,
+        paidAmount,
+        remainingDebt,
+      }
+    })
+    .filter(
+      (row) =>
+        row.deliveries > 0 ||
+        row.paidAmount > 0 ||
+        row.obligationAmount > 0 ||
+        row.openingPayable > 0 ||
+        row.openingReceivable > 0,
+    )
+    .sort((first, second) => second.remainingDebt - first.remainingDebt)
+  const totalClientPaymentAmount = clientSummaryRows.reduce(
+    (sum, row) => sum + row.totalPayable,
+    0,
+  )
+  const totalClientPaidAmount = clientSummaryRows.reduce(
+    (sum, row) => sum + row.paidAmount + row.totalReceivable,
+    0,
+  )
+  const totalClientRemainingDebt = clientSummaryRows.reduce(
+    (sum, row) => sum + row.remainingDebt,
+    0,
+  )
+  const totalClientPaymentWeight = clientSummaryRows.reduce(
+    (sum, row) => sum + row.payWeight,
+    0,
+  )
+  const selectedClient = clients.find((client) => client.id === selectedClientId) || null
+  const selectedClientCargoEntries = cargoEntries.filter(
+    (entry) => entry.clientId === selectedClientId,
+  )
+  const selectedClientPaymentHistory = clientPayments
+    .filter((payment) => payment.clientId === selectedClientId)
+    .sort((first, second) => (first.date < second.date ? 1 : -1))
+  const selectedClientObligationRows = selectedClientCargoEntries
+    .reduce((map, entry) => {
+      const key = entry.date
+      const currentRow = map.get(key) || {
+        date: entry.date,
+        deliveries: 0,
+        cargoWeight: 0,
+        payWeight: 0,
+        obligationAmount: 0,
+      }
+
+      currentRow.deliveries += 1
+      currentRow.cargoWeight += entry.cargoWeight || 0
+      currentRow.payWeight += entry.clientPayWeight || entry.cargoWeight || 0
+      currentRow.obligationAmount += entry.clientTotalAmount || 0
+      map.set(key, currentRow)
+      return map
+    }, new Map())
+    .values()
+  const selectedClientObligationList = [...selectedClientObligationRows].sort((first, second) =>
+    first.date < second.date ? 1 : -1,
+  )
+  const selectedClientObligationAmount = selectedClientObligationList.reduce(
+    (sum, row) => sum + row.obligationAmount,
+    0,
+  )
+  const selectedClientOpeningPayable = selectedClient?.openingPayable || 0
+  const selectedClientOpeningReceivable = selectedClient?.openingReceivable || 0
+  const selectedClientPaidAmount = selectedClientPaymentHistory.reduce(
+    (sum, row) => sum + (row.amount || 0),
+    0,
+  )
+  const selectedClientRemainingDebt =
+    selectedClientObligationAmount +
+    selectedClientOpeningPayable -
+    selectedClientPaidAmount -
+    selectedClientOpeningReceivable
+  const filteredFactoryCargoEntries = cargoEntries.filter((entry) => {
+    const afterFrom = factoryFilters.from ? entry.date >= factoryFilters.from : true
+    const beforeTo = factoryFilters.to ? entry.date <= factoryFilters.to : true
+
+    return afterFrom && beforeTo
+  })
+  const filteredFactoryPaymentEntries = factoryPayments.filter((payment) => {
+    const afterFrom = factoryFilters.from ? payment.date >= factoryFilters.from : true
+    const beforeTo = factoryFilters.to ? payment.date <= factoryFilters.to : true
+
+    return afterFrom && beforeTo
+  })
+  const factorySummaryRows = factories
+    .map((factory) => {
+      const factoryCargoEntries = filteredFactoryCargoEntries.filter(
+        (entry) => entry.factoryId === factory.id,
+      )
+      const factoryPaymentItems = filteredFactoryPaymentEntries.filter(
+        (payment) => payment.factoryId === factory.id,
+      )
+      const obligationAmount = factoryCargoEntries.reduce(
+        (sum, entry) => sum + (entry.totalAmount || 0),
+        0,
+      )
+      const openingPayable = factory.openingPayable || 0
+      const openingReceivable = factory.openingReceivable || 0
+      const netWeight = factoryCargoEntries.reduce(
+        (sum, entry) => sum + (entry.netWeight || 0),
+        0,
+      )
+      const deliveries = factoryCargoEntries.length
+      const paidAmount = factoryPaymentItems.reduce(
+        (sum, payment) => sum + (payment.amount || 0),
+        0,
+      )
+      const totalPayable = obligationAmount + openingPayable
+      const totalReceivable = openingReceivable
+      const remainingDebt = totalPayable - (paidAmount + totalReceivable)
+
+      return {
+        factory,
+        deliveries,
+        netWeight,
+        obligationAmount,
+        openingPayable,
+        openingReceivable,
+        totalPayable,
+        totalReceivable,
+        paidAmount,
+        remainingDebt,
+      }
+    })
+    .filter(
+      (row) =>
+        row.deliveries > 0 ||
+        row.paidAmount > 0 ||
+        row.obligationAmount > 0 ||
+        row.openingPayable > 0 ||
+        row.openingReceivable > 0,
+    )
+    .sort((first, second) => second.remainingDebt - first.remainingDebt)
+  const totalFactoryObligationAmount = factorySummaryRows.reduce(
+    (sum, row) => sum + row.totalPayable,
+    0,
+  )
+  const totalFactoryPaidAmount = factorySummaryRows.reduce(
+    (sum, row) => sum + row.paidAmount + row.totalReceivable,
+    0,
+  )
+  const totalFactoryRemainingDebt = factorySummaryRows.reduce(
+    (sum, row) => sum + row.remainingDebt,
+    0,
+  )
+  const totalFactoryNetWeight = factorySummaryRows.reduce(
+    (sum, row) => sum + row.netWeight,
+    0,
+  )
+  const selectedFactory =
+    factories.find((factory) => factory.id === selectedFactoryId) || null
+  const selectedFactoryCargoEntries = cargoEntries
+    .filter((entry) => entry.factoryId === selectedFactoryId)
+    .sort((first, second) => {
+      if (first.date === second.date) {
+        return second.totalAmount - first.totalAmount
+      }
+
+      return first.date < second.date ? 1 : -1
+    })
+  const selectedFactoryPaymentHistory = factoryPayments
+    .filter((payment) => payment.factoryId === selectedFactoryId)
+    .sort((first, second) => (first.date < second.date ? 1 : -1))
+  const selectedFactoryObligationAmount = selectedFactoryCargoEntries.reduce(
+    (sum, row) => sum + (row.totalAmount || 0),
+    0,
+  )
+  const selectedFactoryOpeningPayable = selectedFactory?.openingPayable || 0
+  const selectedFactoryOpeningReceivable = selectedFactory?.openingReceivable || 0
+  const selectedFactoryPaidAmount = selectedFactoryPaymentHistory.reduce(
+    (sum, row) => sum + (row.amount || 0),
+    0,
+  )
+  const selectedFactoryRemainingDebt =
+    selectedFactoryObligationAmount +
+    selectedFactoryOpeningPayable -
+    selectedFactoryPaidAmount -
+    selectedFactoryOpeningReceivable
+  const factoryPaymentUsdValue = parseNumber(factoryPaymentUsd)
+  const factoryPaymentRateValue = parseNumber(factoryPaymentRate)
+  const factoryPaymentCalculatedAmount =
+    factoryPaymentUsdValue * factoryPaymentRateValue
+  const totalClientDebtToUs = clientSummaryRows.reduce(
+    (sum, row) => sum + Math.max(-row.remainingDebt, 0),
+    0,
+  )
+  const totalClientDebtFromUs = clientSummaryRows.reduce(
+    (sum, row) => sum + Math.max(row.remainingDebt, 0),
+    0,
+  )
+  const dashboardFactoryBalanceRows = factories
+    .map((factory) => {
+      const factoryCargoEntries = filteredCargoEntries.filter(
+        (entry) => entry.factoryId === factory.id,
+      )
+      const factoryPaymentItems = factoryPayments.filter((payment) => {
+        const sameFactory = payment.factoryId === factory.id
+        const afterFrom = dashboardFilters.from
+          ? payment.date >= dashboardFilters.from
+          : true
+        const beforeTo = dashboardFilters.to ? payment.date <= dashboardFilters.to : true
+
+        return sameFactory && afterFrom && beforeTo
+      })
+      const cargoAmount = factoryCargoEntries.reduce(
+        (sum, entry) => sum + (entry.totalAmount || 0),
+        0,
+      )
+      const receivedAmount = factoryPaymentItems.reduce(
+        (sum, payment) => sum + (payment.amount || 0),
+        0,
+      )
+      const receivable = cargoAmount + (factory.openingReceivable || 0)
+      const payable = factory.openingPayable || 0
+      const netBalance = receivable - receivedAmount - payable
+
+      return {
+        factory,
+        cargoAmount,
+        receivedAmount,
+        receivable,
+        payable,
+        netBalance,
+      }
+    })
+    .filter(
+      (row) =>
+        row.cargoAmount > 0 ||
+        row.receivedAmount > 0 ||
+        row.receivable > 0 ||
+        row.payable > 0,
+    )
+    .sort((first, second) => Math.abs(second.netBalance) - Math.abs(first.netBalance))
+  const totalFactoryDebtToUs = dashboardFactoryBalanceRows.reduce(
+    (sum, row) => sum + Math.max(row.netBalance, 0),
+    0,
+  )
+  const totalFactoryDebtFromUs = dashboardFactoryBalanceRows.reduce(
+    (sum, row) => sum + Math.max(-row.netBalance, 0),
+    0,
+  )
+  const totalFactoryReceivedAmount = dashboardFactoryBalanceRows.reduce(
+    (sum, row) => sum + row.receivedAmount,
+    0,
+  )
+  const cashOnHand =
+    totalFactoryReceivedAmount -
+    totalClientPaidAmount -
+    totalDailyExpenses -
+    totalExpenses
+  const realCashProfit = cashOnHand
+  const topClientDebtRows = [...clientSummaryRows]
+    .filter((row) => row.remainingDebt !== 0)
+    .sort((first, second) => Math.abs(second.remainingDebt) - Math.abs(first.remainingDebt))
+    .slice(0, 6)
+  const topFactoryBalanceRows = dashboardFactoryBalanceRows.slice(0, 6)
   const carReports = cars
     .map((car) => {
       const entries = filteredCargoEntries.filter(
@@ -115,13 +639,51 @@ function App() {
     })
     .sort((first, second) => second.amount - first.amount)
 
+  const loadData = async () => {
+    setDataError('')
+    setDataLoading(true)
+
+    try {
+      const data = await requestJson('/api/bootstrap')
+      setCars(data.cars || [])
+      setClients(data.clients || [])
+      setFactories(data.factories || [])
+      setExpenses(data.expenses || [])
+      setDailyExpenses(data.dailyExpenses || [])
+      setClientPayments(data.clientPayments || [])
+      setFactoryPayments(data.factoryPayments || [])
+      setCargoEntries(data.cargoEntries || [])
+    } catch (err) {
+      setDataError(err.message)
+    } finally {
+      setDataLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    localStorage.removeItem('temir_cars')
+    localStorage.removeItem('temir_clients')
+    localStorage.removeItem('temir_factories')
+    localStorage.removeItem('temir_expenses')
+    localStorage.removeItem('temir_daily_expenses')
+    localStorage.removeItem('temir_cargo_entries')
+    loadData()
+  }, [])
+
+  useEffect(() => {
+    if (!dailyExpenseEditing) {
+      setDailyExpenseInput('')
+      setDailyExpenseError('')
+    }
+  }, [summaryDate, summaryDailyExpense])
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
     setIsLoading(true)
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +711,37 @@ function App() {
     setUser(null)
   }
 
-  const handleCreateCar = (event) => {
+  const createItem = async (route, payload, setItems) => {
+    const item = await requestJson(`/api/${route}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+
+    setItems((items) => [item, ...items])
+    return item
+  }
+
+  const updateItem = async (route, itemId, payload, setItems) => {
+    const item = await requestJson(`/api/${route}/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+
+    setItems((items) =>
+      items.map((currentItem) => (currentItem.id === itemId ? item : currentItem)),
+    )
+    return item
+  }
+
+  const deleteItem = async (route, itemId, setItems) => {
+    await requestJson(`/api/${route}/${itemId}`, {
+      method: 'DELETE',
+    })
+
+    setItems((items) => items.filter((item) => item.id !== itemId))
+  }
+
+  const handleCreateCar = async (event) => {
     event.preventDefault()
 
     const number = carNumber.trim().toUpperCase()
@@ -158,22 +750,12 @@ function App() {
       return
     }
 
-    const nextCars = [
-      {
-        id: crypto.randomUUID(),
-        number,
-      },
-      ...cars,
-    ]
-
-    localStorage.setItem('temir_cars', JSON.stringify(nextCars))
-    setCars(nextCars)
-    setCarNumber('')
-  }
-
-  const saveCars = (nextCars) => {
-    localStorage.setItem('temir_cars', JSON.stringify(nextCars))
-    setCars(nextCars)
+    try {
+      await createItem('cars', { number }, setCars)
+      setCarNumber('')
+    } catch (err) {
+      setDataError(err.message)
+    }
   }
 
   const handleStartEdit = (car) => {
@@ -186,7 +768,7 @@ function App() {
     setEditingNumber('')
   }
 
-  const handleSaveEdit = (event) => {
+  const handleSaveEdit = async (event) => {
     event.preventDefault()
 
     const number = editingNumber.trim().toUpperCase()
@@ -195,26 +777,457 @@ function App() {
       return
     }
 
-    const nextCars = cars.map((car) =>
-      car.id === editingCarId ? { ...car, number } : car,
-    )
-
-    saveCars(nextCars)
-    handleCancelEdit()
+    try {
+      await updateItem('cars', editingCarId, { number }, setCars)
+      handleCancelEdit()
+    } catch (err) {
+      setDataError(err.message)
+    }
   }
 
-  const handleDeleteCar = (carId) => {
-    const nextCars = cars.filter((car) => car.id !== carId)
-    saveCars(nextCars)
+  const handleDeleteCar = async (carId) => {
+    try {
+      await deleteItem('cars', carId, setCars)
+    } catch (err) {
+      setDataError(err.message)
+      return
+    }
 
     if (editingCarId === carId) {
       handleCancelEdit()
     }
   }
 
-  const saveCargoEntries = (nextEntries) => {
-    localStorage.setItem('temir_cargo_entries', JSON.stringify(nextEntries))
-    setCargoEntries(nextEntries)
+  const handleCreateClient = async (event) => {
+    event.preventDefault()
+
+    const name = clientName.trim()
+    const phone = clientPhone.trim()
+    const openingPayable = parseNumber(clientOpeningPayable)
+    const openingReceivable = parseNumber(clientOpeningReceivable)
+
+    if (!name) {
+      return
+    }
+
+    try {
+      await createItem(
+        'clients',
+        { name, phone, openingPayable, openingReceivable },
+        setClients,
+      )
+      setClientName('')
+      setClientPhone('')
+      setClientOpeningPayable('')
+      setClientOpeningReceivable('')
+      setClientModalOpen(false)
+    } catch (err) {
+      setDataError(err.message)
+    }
+  }
+
+  const handleStartEditClient = (client) => {
+    setEditingClientId(client.id)
+    setEditingClientName(client.name)
+    setEditingClientPhone(client.phone)
+    setEditingClientOpeningPayable(
+      client.openingPayable ? formatNumberInput(String(client.openingPayable)) : '',
+    )
+    setEditingClientOpeningReceivable(
+      client.openingReceivable ? formatNumberInput(String(client.openingReceivable)) : '',
+    )
+  }
+
+  const handleCancelEditClient = () => {
+    setEditingClientId(null)
+    setEditingClientName('')
+    setEditingClientPhone('')
+    setEditingClientOpeningPayable('')
+    setEditingClientOpeningReceivable('')
+  }
+
+  const handleOpenClientDetail = (clientId) => {
+    setSelectedClientId(clientId)
+    setClientPaymentDate(getTodayDate())
+    setClientPaymentAmount('')
+    setClientPaymentNote('')
+    setClientPaymentError('')
+    setClientDetailModalOpen(true)
+  }
+
+  const handleCloseClientDetail = () => {
+    setClientDetailModalOpen(false)
+    setSelectedClientId('')
+    setClientPaymentDate(getTodayDate())
+    setClientPaymentAmount('')
+    setClientPaymentNote('')
+    setClientPaymentError('')
+  }
+
+  const handleSaveClient = async (event) => {
+    event.preventDefault()
+
+    const name = editingClientName.trim()
+    const phone = editingClientPhone.trim()
+    const openingPayable = parseNumber(editingClientOpeningPayable)
+    const openingReceivable = parseNumber(editingClientOpeningReceivable)
+
+    if (!name) {
+      return
+    }
+
+    try {
+      await updateItem(
+        'clients',
+        editingClientId,
+        { name, phone, openingPayable, openingReceivable },
+        setClients,
+      )
+      handleCancelEditClient()
+    } catch (err) {
+      setDataError(err.message)
+    }
+  }
+
+  const handleDeleteClient = async (clientId) => {
+    try {
+      await deleteItem('clients', clientId, setClients)
+    } catch (err) {
+      setDataError(err.message)
+      return
+    }
+
+    if (editingClientId === clientId) {
+      handleCancelEditClient()
+    }
+  }
+
+  const handleCreateClientPayment = async (event) => {
+    event.preventDefault()
+
+    const amount = parseNumber(clientPaymentAmount)
+    const note = clientPaymentNote.trim()
+
+    if (!selectedClientId) {
+      setClientPaymentError('Klent tanlanmagan')
+      return
+    }
+
+    if (!clientPaymentDate) {
+      setClientPaymentError('To\'lov sanasini tanlang')
+      return
+    }
+
+    if (!amount) {
+      setClientPaymentError('To\'lov summasini kiriting')
+      return
+    }
+
+    try {
+      await createItem(
+        'clientPayments',
+        {
+          clientId: selectedClientId,
+          date: clientPaymentDate,
+          amount,
+          note,
+        },
+        setClientPayments,
+      )
+      setClientPaymentAmount('')
+      setClientPaymentNote('')
+      setClientPaymentError('')
+    } catch (err) {
+      setClientPaymentError(err.message)
+    }
+  }
+
+  const handleCreateFactory = async (event) => {
+    event.preventDefault()
+
+    const name = factoryName.trim()
+    const openingPayable = parseNumber(factoryOpeningPayable)
+    const openingReceivable = parseNumber(factoryOpeningReceivable)
+
+    if (!name) {
+      return
+    }
+
+    try {
+      await createItem(
+        'factories',
+        { name, openingPayable, openingReceivable },
+        setFactories,
+      )
+      setFactoryName('')
+      setFactoryOpeningPayable('')
+      setFactoryOpeningReceivable('')
+      setFactoryModalOpen(false)
+    } catch (err) {
+      setDataError(err.message)
+    }
+  }
+
+  const handleStartEditFactory = (factory) => {
+    setEditingFactoryId(factory.id)
+    setEditingFactoryName(factory.name)
+    setEditingFactoryOpeningPayable(
+      factory.openingPayable ? formatNumberInput(String(factory.openingPayable)) : '',
+    )
+    setEditingFactoryOpeningReceivable(
+      factory.openingReceivable ? formatNumberInput(String(factory.openingReceivable)) : '',
+    )
+  }
+
+  const handleCancelEditFactory = () => {
+    setEditingFactoryId(null)
+    setEditingFactoryName('')
+    setEditingFactoryOpeningPayable('')
+    setEditingFactoryOpeningReceivable('')
+  }
+
+  const handleOpenFactoryDetail = (factoryId) => {
+    setSelectedFactoryId(factoryId)
+    setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentUsd('')
+    setFactoryPaymentRate('')
+    setFactoryPaymentAmount('')
+    setFactoryPaymentNote('')
+    setFactoryPaymentError('')
+    setFactoryDetailModalOpen(true)
+  }
+
+  const handleCloseFactoryDetail = () => {
+    setFactoryDetailModalOpen(false)
+    setSelectedFactoryId('')
+    setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentUsd('')
+    setFactoryPaymentRate('')
+    setFactoryPaymentAmount('')
+    setFactoryPaymentNote('')
+    setFactoryPaymentError('')
+  }
+
+  const handleSaveFactory = async (event) => {
+    event.preventDefault()
+
+    const name = editingFactoryName.trim()
+    const openingPayable = parseNumber(editingFactoryOpeningPayable)
+    const openingReceivable = parseNumber(editingFactoryOpeningReceivable)
+
+    if (!name) {
+      return
+    }
+
+    try {
+      await updateItem(
+        'factories',
+        editingFactoryId,
+        { name, openingPayable, openingReceivable },
+        setFactories,
+      )
+      handleCancelEditFactory()
+    } catch (err) {
+      setDataError(err.message)
+    }
+  }
+
+  const handleDeleteFactory = async (factoryId) => {
+    try {
+      await deleteItem('factories', factoryId, setFactories)
+    } catch (err) {
+      setDataError(err.message)
+      return
+    }
+
+    if (editingFactoryId === factoryId) {
+      handleCancelEditFactory()
+    }
+  }
+
+  const handleCreateFactoryPayment = async (event) => {
+    event.preventDefault()
+
+    const usdAmount = parseNumber(factoryPaymentUsd)
+    const exchangeRate = parseNumber(factoryPaymentRate)
+    const amount = usdAmount * exchangeRate
+    const note = factoryPaymentNote.trim()
+
+    if (!selectedFactoryId) {
+      setFactoryPaymentError('Zavod tanlanmagan')
+      return
+    }
+
+    if (!factoryPaymentDate) {
+      setFactoryPaymentError('To\'lov sanasini tanlang')
+      return
+    }
+
+    if (!usdAmount) {
+      setFactoryPaymentError('USD summani kiriting')
+      return
+    }
+
+    if (!exchangeRate) {
+      setFactoryPaymentError('Kursni kiriting')
+      return
+    }
+
+    if (!amount) {
+      setFactoryPaymentError('So\'m summasi hisoblanmadi')
+      return
+    }
+
+    try {
+      await createItem(
+        'factoryPayments',
+        {
+          factoryId: selectedFactoryId,
+          date: factoryPaymentDate,
+          amount,
+          usdAmount,
+          exchangeRate,
+          note,
+        },
+        setFactoryPayments,
+      )
+      setFactoryPaymentUsd('')
+      setFactoryPaymentRate('')
+      setFactoryPaymentAmount('')
+      setFactoryPaymentNote('')
+      setFactoryPaymentError('')
+    } catch (err) {
+      setFactoryPaymentError(err.message)
+    }
+  }
+
+  const handleCreateExpense = async (event) => {
+    event.preventDefault()
+
+    const amount = parseNumber(expenseAmount)
+    const reason = expenseReason.trim()
+
+    if (!expenseDate) {
+      setExpenseError('Xarajat sanasini tanlang')
+      return
+    }
+
+    if (!amount) {
+      setExpenseError('Xarajat summasini raqamda kiriting')
+      return
+    }
+
+    if (!reason) {
+      setExpenseError('Xarajat sababini kiriting')
+      return
+    }
+
+    const expensePayload = {
+      date: expenseDate,
+      amount,
+      reason,
+    }
+
+    try {
+      if (editingExpenseId) {
+        await updateItem('expenses', editingExpenseId, expensePayload, setExpenses)
+      } else {
+        await createItem('expenses', expensePayload, setExpenses)
+      }
+
+      setExpenseDate('')
+      setExpenseAmount('')
+      setExpenseReason('')
+      setExpenseError('')
+      setEditingExpenseId(null)
+      setExpenseModalOpen(false)
+    } catch (err) {
+      setExpenseError(err.message)
+    }
+  }
+
+  const handleDeleteExpense = async (expenseId) => {
+    try {
+      await deleteItem('expenses', expenseId, setExpenses)
+    } catch (err) {
+      setDataError(err.message)
+      return
+    }
+
+    if (editingExpenseId === expenseId) {
+      setEditingExpenseId(null)
+      setExpenseDate('')
+      setExpenseAmount('')
+      setExpenseReason('')
+      setExpenseError('')
+      setExpenseModalOpen(false)
+    }
+  }
+
+  const handleEditExpense = (expense) => {
+    setEditingExpenseId(expense.id)
+    setExpenseDate(expense.date || '')
+    setExpenseAmount(formatNumberInput(String(expense.amount)))
+    setExpenseReason(expense.reason)
+    setExpenseError('')
+    setExpenseModalOpen(true)
+  }
+
+  const handleCloseExpenseModal = () => {
+    setExpenseModalOpen(false)
+    setEditingExpenseId(null)
+    setExpenseDate('')
+    setExpenseAmount('')
+    setExpenseReason('')
+    setExpenseError('')
+  }
+
+  const saveDailyExpense = async () => {
+    if (!summaryDate || dailyExpenseSaving) {
+      return
+    }
+
+    const amount = parseNumber(dailyExpenseInput)
+    const existingExpense = dailyExpenses.find(
+      (expense) => expense.date === summaryDate,
+    )
+
+    if (!amount && !existingExpense) {
+      setDailyExpenseInput('')
+      return
+    }
+
+    setDailyExpenseSaving(true)
+    setDailyExpenseError('')
+
+    try {
+      if (existingExpense) {
+        if (!amount) {
+          await deleteItem('dailyExpenses', existingExpense.id, setDailyExpenses)
+          setDailyExpenseInput('')
+        } else {
+          await updateItem(
+            'dailyExpenses',
+            existingExpense.id,
+            { date: summaryDate, amount },
+            setDailyExpenses,
+          )
+          setDailyExpenseInput('')
+        }
+      } else {
+        await createItem(
+          'dailyExpenses',
+          { date: summaryDate, amount },
+          setDailyExpenses,
+        )
+        setDailyExpenseInput('')
+      }
+      setDailyExpenseEditing(false)
+    } catch (err) {
+      setDailyExpenseError(err.message)
+    } finally {
+      setDailyExpenseSaving(false)
+    }
   }
 
   const updateCargoField = (field, value) => {
@@ -231,10 +1244,14 @@ function App() {
     setCargoError('')
   }
 
-  const handleSaveCargo = (event) => {
+  const handleSaveCargo = async (event) => {
     event.preventDefault()
 
     const selectedCar = cars.find((car) => car.id === cargoForm.carId)
+    const selectedClient = clients.find((client) => client.id === cargoForm.clientId)
+    const selectedFactory = factories.find(
+      (factory) => factory.id === cargoForm.factoryId,
+    )
 
     if (!cargoForm.date) {
       setCargoError('Sanani tanlang')
@@ -243,6 +1260,16 @@ function App() {
 
     if (!selectedCar) {
       setCargoError('Mashinani tanlang')
+      return
+    }
+
+    if (!selectedClient) {
+      setCargoError('Klentni tanlang')
+      return
+    }
+
+    if (!selectedFactory) {
+      setCargoError('Zavodni tanlang')
       return
     }
 
@@ -256,28 +1283,50 @@ function App() {
       return
     }
 
+    if (!clientPricePerKg) {
+      setCargoError("Klentga to'lov narxini kiriting")
+      return
+    }
+
     const cargoEntry = {
-      id: editingCargoId || crypto.randomUUID(),
       date: cargoForm.date,
       carId: selectedCar.id,
       carNumber: selectedCar.number,
+      clientId: selectedClient.id,
+      clientName: selectedClient.name,
+      factoryId: selectedFactory.id,
+      factoryName: selectedFactory.name,
       grossWeight,
       emptyWeight,
       cargoWeight,
       discountWeight,
+      transportCost,
       netWeight,
       pricePerKg,
+      clientWeightMode,
+      clientPayWeight,
+      clientPricePerKg,
+      clientTotalAmount,
       totalAmount,
+      profitAmount,
     }
 
-    const nextEntries = editingCargoId
-      ? cargoEntries.map((entry) =>
-          entry.id === editingCargoId ? cargoEntry : entry,
+    try {
+      if (editingCargoId) {
+        await updateItem(
+          'cargoEntries',
+          editingCargoId,
+          cargoEntry,
+          setCargoEntries,
         )
-      : [cargoEntry, ...cargoEntries]
+      } else {
+        await createItem('cargoEntries', cargoEntry, setCargoEntries)
+      }
 
-    saveCargoEntries(nextEntries)
-    resetCargoForm()
+      resetCargoForm()
+    } catch (err) {
+      setCargoError(err.message)
+    }
   }
 
   const handleEditCargo = (entry) => {
@@ -285,16 +1334,26 @@ function App() {
     setCargoForm({
       date: entry.date,
       carId: entry.carId,
+      clientId: entry.clientId || '',
+      factoryId: entry.factoryId || '',
       grossWeight: String(entry.grossWeight),
       emptyWeight: String(entry.emptyWeight),
       discountWeight: String(entry.discountWeight),
+      transportCost: String(entry.transportCost || ''),
       pricePerKg: String(entry.pricePerKg),
+      clientPricePerKg: String(entry.clientPricePerKg || ''),
+      clientWeightMode: entry.clientWeightMode || 'cargo',
     })
     setActivePage('cargo-delivery')
   }
 
-  const handleDeleteCargo = (entryId) => {
-    saveCargoEntries(cargoEntries.filter((entry) => entry.id !== entryId))
+  const handleDeleteCargo = async (entryId) => {
+    try {
+      await deleteItem('cargoEntries', entryId, setCargoEntries)
+    } catch (err) {
+      setDataError(err.message)
+      return
+    }
 
     if (editingCargoId === entryId) {
       resetCargoForm()
@@ -302,16 +1361,24 @@ function App() {
   }
 
   const handleExportCargoToExcel = () => {
-    const rows = cargoEntries.map((entry) => ({
+    const rows = displayedCargoEntries.map((entry) => ({
       Sana: entry.date,
       Mashina: entry.carNumber,
+      Klent: entry.clientName || '',
+      Zavod: entry.factoryName || '',
       "To'la vazni": entry.grossWeight,
       'Yuksiz vazni': entry.emptyWeight,
       'Qolgan yuki': entry.cargoWeight,
       Skidka: entry.discountWeight,
+      Yolkira: entry.transportCost || 0,
       'Qolgan vazn': entry.netWeight,
+      "Klent hisob turi": entry.clientWeightMode === 'net' ? "Qolgan vazn" : "Qolgan yuki",
+      "To'lov kg": entry.clientPayWeight || entry.cargoWeight,
       'Kilosiga pul': entry.pricePerKg,
+      "Klent narxi": entry.clientPricePerKg || 0,
+      "Klentga to'lov": Math.round(entry.clientTotalAmount || 0),
       'Aniq summa': Math.round(entry.totalAmount),
+      Foyda: Math.round(entry.profitAmount || 0),
     }))
 
     const worksheet = XLSX.utils.json_to_sheet(rows)
@@ -319,6 +1386,143 @@ function App() {
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Yuk topshirish')
     XLSX.writeFile(workbook, 'yuk-topshirish.xlsx')
+  }
+
+  const handleExportClientDetailToExcel = () => {
+    if (!selectedClient) {
+      return
+    }
+
+    const workbook = XLSX.utils.book_new()
+    const summaryRows = [
+      {
+        Klent: selectedClient.name,
+        Telefon: selectedClient.phone || '-',
+        "Boshlang'ich biz unga qarzmiz": Math.round(selectedClientOpeningPayable),
+        "Boshlang'ich u bizga qarz": Math.round(selectedClientOpeningReceivable),
+        "Berish kerak": Math.round(
+          selectedClientObligationAmount + selectedClientOpeningPayable,
+        ),
+        Berganmiz: Math.round(
+          selectedClientPaidAmount + selectedClientOpeningReceivable,
+        ),
+        "Qolgan qarz": Math.round(selectedClientRemainingDebt),
+      },
+    ]
+    const obligationRows = [
+      ...(selectedClientOpeningPayable || selectedClientOpeningReceivable
+        ? [
+            {
+              Sana: "Boshlang'ich",
+              Topshirish: '-',
+              "Yuk kg": '-',
+              "To'lov kg": '-',
+              Qarz: Math.round(
+                selectedClientOpeningPayable - selectedClientOpeningReceivable,
+              ),
+            },
+          ]
+        : []),
+      ...selectedClientObligationList.map((row) => ({
+        Sana: row.date,
+        Topshirish: row.deliveries,
+        "Yuk kg": Number(row.cargoWeight.toFixed(1)),
+        "To'lov kg": Number(row.payWeight.toFixed(1)),
+        Qarz: Math.round(row.obligationAmount),
+      })),
+    ]
+    const paymentRows = selectedClientPaymentHistory.map((row) => ({
+      Sana: row.date,
+      Summa: Math.round(row.amount || 0),
+      Izoh: row.note || '-',
+    }))
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(summaryRows),
+      'Umumiy',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(obligationRows),
+      'Qarz tarixi',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(paymentRows.length ? paymentRows : [{ Sana: '-', Summa: 0, Izoh: '-' }]),
+      "To'lovlar",
+    )
+    XLSX.writeFile(workbook, `${selectedClient.name}-klent-hisoboti.xlsx`)
+  }
+
+  const handleExportFactoryDetailToExcel = () => {
+    if (!selectedFactory) {
+      return
+    }
+
+    const workbook = XLSX.utils.book_new()
+    const summaryRows = [
+      {
+        Zavod: selectedFactory.name,
+        "Boshlang'ich biz unga qarzmiz": Math.round(selectedFactoryOpeningPayable),
+        "Boshlang'ich u bizga qarz": Math.round(selectedFactoryOpeningReceivable),
+        "Berishi kerak": Math.round(
+          selectedFactoryObligationAmount + selectedFactoryOpeningPayable,
+        ),
+        Bergan: Math.round(
+          selectedFactoryPaidAmount + selectedFactoryOpeningReceivable,
+        ),
+        "Qolgan pul": Math.round(selectedFactoryRemainingDebt),
+      },
+    ]
+    const cargoRows = [
+      ...(selectedFactoryOpeningPayable || selectedFactoryOpeningReceivable
+        ? [
+            {
+              Sana: "Boshlang'ich",
+              Mashina: '-',
+              "Sof kg": '-',
+              "Bizning pul": Math.round(
+                selectedFactoryOpeningPayable - selectedFactoryOpeningReceivable,
+              ),
+            },
+          ]
+        : []),
+      ...selectedFactoryCargoEntries.map((row) => ({
+        Sana: row.date,
+        Mashina: row.carNumber,
+        "Sof kg": Number((row.netWeight || 0).toFixed(1)),
+        "Bizning pul": Math.round(row.totalAmount || 0),
+      })),
+    ]
+    const paymentRows = selectedFactoryPaymentHistory.map((row) => ({
+      Sana: row.date,
+      USD: row.usdAmount || 0,
+      Kurs: row.exchangeRate || 0,
+      Summa: Math.round(row.amount || 0),
+      Izoh: row.note || '-',
+    }))
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(summaryRows),
+      'Umumiy',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(cargoRows),
+      'Yuklar',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(
+        paymentRows.length
+          ? paymentRows
+          : [{ Sana: '-', USD: 0, Kurs: 0, Summa: 0, Izoh: '-' }],
+      ),
+      "To'lovlar",
+    )
+    XLSX.writeFile(workbook, `${selectedFactory.name}-zavod-hisoboti.xlsx`)
   }
 
   const handleChangePage = (page) => {
@@ -367,7 +1571,7 @@ function App() {
   }
 
   return (
-    <main className="dashboard">
+    <main className={`dashboard ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <header className="mobile-topbar">
         <p>TEMIR BIZNES</p>
         <button type="button" onClick={() => setMobileMenuOpen(true)}>
@@ -384,10 +1588,21 @@ function App() {
         />
       ) : null}
 
-      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+      <aside
+        className={`sidebar ${mobileMenuOpen ? 'open' : ''} ${
+          sidebarCollapsed ? 'collapsed' : ''
+        }`}
+      >
         <div>
           <div className="sidebar-head">
             <p className="brand">TEMIR BIZNES</p>
+            <button
+              className="sidebar-toggle"
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+            >
+              {sidebarCollapsed ? '>' : '<'}
+            </button>
             <button
               className="menu-close"
               type="button"
@@ -419,6 +1634,27 @@ function App() {
               Yuk topshirish
             </button>
             <button
+              className={activePage === 'clients' ? 'active' : ''}
+              type="button"
+              onClick={() => handleChangePage('clients')}
+            >
+              Klentlar
+            </button>
+            <button
+              className={activePage === 'expenses' ? 'active' : ''}
+              type="button"
+              onClick={() => handleChangePage('expenses')}
+            >
+              Xarajatlar
+            </button>
+            <button
+              className={activePage === 'factories' ? 'active' : ''}
+              type="button"
+              onClick={() => handleChangePage('factories')}
+            >
+              Zavod
+            </button>
+            <button
               className={activePage === 'settings' ? 'active' : ''}
               type="button"
               onClick={() => handleChangePage('settings')}
@@ -437,19 +1673,22 @@ function App() {
       </aside>
 
       <section className="content">
+        <button
+          className={`content-sidebar-toggle ${sidebarCollapsed ? 'visible' : ''}`}
+          type="button"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          {'>'}
+        </button>
         <div className="white-page">
+          {dataError ? <p className="data-error">{dataError}</p> : null}
+          {dataLoading ? <p className="data-loading">Ma'lumotlar yuklanmoqda...</p> : null}
+
           {activePage === 'home' ? (
             <div className="dashboard-page">
-              <div className="page-heading dashboard-heading">
-                <div>
-                  <h1>Bosh sahifa</h1>
-                  <p>Temir yig'ish va zavodga topshirish bo'yicha umumiy hisobot.</p>
-                </div>
-              </div>
-
-              <div className="dashboard-filter">
-                <label>
-                  Boshlanish sana
+              <div className="dashboard-toolbar">
+                <label className="mini-date-field">
+                  Dan
                   <input
                     type="date"
                     value={dashboardFilters.from}
@@ -461,8 +1700,8 @@ function App() {
                     }
                   />
                 </label>
-                <label>
-                  Tugash sana
+                <label className="mini-date-field">
+                  Gacha
                   <input
                     type="date"
                     value={dashboardFilters.to}
@@ -476,30 +1715,46 @@ function App() {
                 </label>
               </div>
 
-              <div className="stat-grid">
-                <div className="stat-card stat-money stat-card-wide">
-                  <span>Jami topilgan pul</span>
-                  <strong>{formatMoney(totalAmountAll)} so'm</strong>
+              <div className="stat-grid dashboard-stat-grid">
+                <div className="stat-card stat-profit-strong">
+                  <span>Hisoblangan foyda</span>
+                  <strong>{formatMoney(netProfit)} so'm</strong>
                 </div>
-                <div className="stat-card stat-today-money">
-                  <span>Bugungi tushum</span>
-                  <strong>{formatMoney(todayTotalAmount)} so'm</strong>
+                <div className="stat-card stat-cashbox">
+                  <span>Kassa</span>
+                  <strong>{formatMoney(cashOnHand)} so'm</strong>
+                </div>
+                <div className="stat-card stat-cash">
+                  <span>Haqiqiy foyda</span>
+                  <strong>{formatMoney(realCashProfit)} so'm</strong>
+                </div>
+                <div className="stat-card stat-money">
+                  <span>Zavoddan tushgan pul</span>
+                  <strong>{formatMoney(totalFactoryReceivedAmount)} so'm</strong>
+                </div>
+                <div className="stat-card stat-factory-debt">
+                  <span>Zavod bizga qarzi</span>
+                  <strong>{formatMoney(totalFactoryDebtToUs)} so'm</strong>
+                </div>
+                <div className="stat-card stat-client-paid">
+                  <span>Klentlarga to'langan pul</span>
+                  <strong>{formatMoney(totalClientPaidAmount)} so'm</strong>
+                </div>
+                <div className="stat-card stat-client-debt">
+                  <span>Klentlarga qarzimiz</span>
+                  <strong>{formatMoney(totalClientDebtFromUs)} so'm</strong>
                 </div>
                 <div className="stat-card stat-kg">
-                  <span>Jami sof kg</span>
+                  <span>Sof kg</span>
                   <strong>{formatWeight(totalNetKg)} kg</strong>
-                </div>
-                <div className="stat-card stat-today-kg">
-                  <span>Bugungi sof kg</span>
-                  <strong>{formatWeight(todayTotalKg)} kg</strong>
-                </div>
-                <div className="stat-card stat-cars">
-                  <span>Mashinalar</span>
-                  <strong>{cars.length}</strong>
                 </div>
                 <div className="stat-card stat-count">
                   <span>Topshirishlar</span>
                   <strong>{filteredCargoEntries.length}</strong>
+                </div>
+                <div className="stat-card stat-expense">
+                  <span>Jami xarajat</span>
+                  <strong>{formatMoney(totalExpenses + totalDailyExpenses)} so'm</strong>
                 </div>
               </div>
 
@@ -507,7 +1762,7 @@ function App() {
                 <section className="report-panel">
                   <div className="panel-title">
                     <h2>Mashinalar hisoboti</h2>
-                    <span>Jami kg va pul bo'yicha</span>
+                    <span>Jami kg va zavod summasi bo'yicha</span>
                   </div>
                   <div className="report-list">
                     {carReports.length ? (
@@ -545,21 +1800,85 @@ function App() {
 
                 <section className="report-panel">
                   <div className="panel-title">
-                    <h2>Umumiy ko'rsatkichlar</h2>
-                    <span>Zavod hisob-kitobi</span>
+                    <h2>Balans holati</h2>
+                    <span>Klent va zavod bo'yicha eng katta qoldiqlar</span>
                   </div>
-                  <div className="metric-list">
-                    <div>
-                      <span>Skidkagacha yuk</span>
-                      <strong>{formatWeight(totalCargoWeight)} kg</strong>
+                  <div className="balance-panel-grid">
+                    <div className="balance-group">
+                      <div className="balance-group-head">
+                        <strong>Klentlar</strong>
+                        <span>Bizga va bizdan qolgan summa</span>
+                      </div>
+                      <div className="balance-list">
+                        {topClientDebtRows.length ? (
+                          topClientDebtRows.map((row) => (
+                            <div className="balance-row" key={row.client.id}>
+                              <div>
+                                <strong>{row.client.name}</strong>
+                                <span>
+                                  {row.remainingDebt > 0
+                                    ? "Biz klentga qarzmiz"
+                                    : 'Klent bizga qarz'}
+                                </span>
+                              </div>
+                              <strong>{formatMoney(Math.abs(row.remainingDebt))} so'm</strong>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="empty-text">Klent balans yozuvi yo'q.</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span>Skidkadan keyin</span>
-                      <strong>{formatWeight(totalNetKg)} kg</strong>
+                    <div className="balance-group">
+                      <div className="balance-group-head">
+                        <strong>Zavodlar</strong>
+                        <span>Bizga va bizdan qolgan summa</span>
+                      </div>
+                      <div className="balance-list">
+                        {topFactoryBalanceRows.length ? (
+                          topFactoryBalanceRows.map((row) => (
+                            <div className="balance-row" key={row.factory.id}>
+                              <div>
+                                <strong>{row.factory.name}</strong>
+                                <span>
+                                  {row.netBalance >= 0
+                                    ? 'Zavod bizga qarz'
+                                    : 'Biz zavodga qarzmiz'}
+                                </span>
+                              </div>
+                              <strong>{formatMoney(Math.abs(row.netBalance))} so'm</strong>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="empty-text">Zavod balans yozuvi yo'q.</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span>O'rtacha kilo narxi</span>
-                      <strong>{formatMoney(averagePrice)} so'm</strong>
+                    <div className="metric-list compact-metric-list">
+                      <div>
+                        <span>Jami zavod puli</span>
+                        <strong>{formatMoney(totalAmountAll)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>Jami xarajat</span>
+                        <strong>{formatMoney(totalExpenses + totalDailyExpenses)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>Klent bizga qarzi</span>
+                        <strong>{formatMoney(totalClientDebtToUs)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>Biz zavodga qarzmiz</span>
+                        <strong>{formatMoney(totalFactoryDebtFromUs)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>O'rtacha kilo narxi</span>
+                        <strong>{formatMoney(averagePrice)} so'm</strong>
+                      </div>
+                      <div>
+                        <span>{summaryAmountLabel}</span>
+                        <strong>{formatMoney(summaryTotalAmount)} so'm</strong>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -638,29 +1957,1098 @@ function App() {
             </div>
           ) : null}
 
-          {activePage === 'cargo-delivery' ? (
-            <div className="cargo-page">
-              <div className="page-heading">
-                <h1>Yuk topshirish</h1>
-                <p>Temir yukini zavodga topshirish ma'lumotlarini kiriting.</p>
+          {activePage === 'clients' ? (
+            <div className="clients-page">
+              <div className="clients-toolbar">
+                <div className="clients-title">
+                  <h1>Klentlar</h1>
+                </div>
+                <div className="clients-toolbar-actions">
+                  <label className="mini-date-field">
+                    Dan
+                    <input
+                      type="date"
+                      value={clientFilters.from}
+                      onChange={(event) =>
+                        setClientFilters((filters) => ({
+                          ...filters,
+                          from: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="mini-date-field">
+                    Gacha
+                    <input
+                      type="date"
+                      value={clientFilters.to}
+                      onChange={(event) =>
+                        setClientFilters((filters) => ({
+                          ...filters,
+                          to: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <button
+                    className="clients-add-button"
+                    type="button"
+                    onClick={() => {
+                      setClientName('')
+                      setClientPhone('')
+                      setClientModalOpen(true)
+                    }}
+                  >
+                    Klent yaratish
+                  </button>
+                </div>
               </div>
 
-              <div className="today-summary">
+              <div className="client-summary-card">
                 <div>
-                  <span>Bugun qabul qilingan jami kg</span>
-                  <strong>{formatWeight(todayTotalKg)} kg</strong>
+                  <span>Berish kerak</span>
+                  <strong>{formatMoney(totalClientPaymentAmount)} so'm</strong>
                 </div>
                 <div>
-                  <span>Zavod bugun bergan pul</span>
-                  <strong>{formatMoney(todayTotalAmount)} so'm</strong>
+                  <span>Berganmiz</span>
+                  <strong>{formatMoney(totalClientPaidAmount)} so'm</strong>
+                </div>
+                <div>
+                  <span>Qolgan qarz</span>
+                  <strong>{formatMoney(totalClientRemainingDebt)} so'm</strong>
+                </div>
+                <div>
+                  <span>Jami yuk</span>
+                  <strong>{formatWeight(totalClientPaymentWeight)} kg</strong>
+                </div>
+              </div>
+
+              <div className="client-table-wrap">
+                <table className="client-table">
+                  <thead>
+                    <tr>
+                      <th>Klent</th>
+                      <th>Telefon</th>
+                      <th>Jami yuk</th>
+                      <th>Berish kerak</th>
+                      <th>Berganmiz</th>
+                      <th>Qolgan</th>
+                      <th>Amal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientSummaryRows.length ? (
+                      clientSummaryRows.map((row) => (
+                        <tr key={row.client.id}>
+                          <td data-label="Klent">{row.client.name}</td>
+                          <td data-label="Telefon">{row.client.phone || '-'}</td>
+                          <td data-label="Jami yuk">
+                            {formatWeight(row.payWeight)} kg / {row.deliveries} ta
+                          </td>
+                          <td data-label="Berish kerak">
+                            {formatMoney(row.obligationAmount)} so'm
+                          </td>
+                          <td data-label="Berganmiz">
+                            {formatMoney(row.paidAmount)} so'm
+                          </td>
+                          <td data-label="Qolgan">
+                            {formatMoney(row.remainingDebt)} so'm
+                          </td>
+                          <td data-label="Amal">
+                            <div className="client-actions">
+                              <button
+                                className="view-button"
+                                type="button"
+                                onClick={() => handleOpenClientDetail(row.client.id)}
+                              >
+                                Ko'rish
+                              </button>
+                              <button
+                                className="edit-button"
+                                type="button"
+                                onClick={() => {
+                                  handleStartEditClient(row.client)
+                                  handleOpenClientDetail(row.client.id)
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="delete-button"
+                                type="button"
+                                onClick={() => handleDeleteClient(row.client.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6">Tanlangan oraliqda klent ma'lumoti topilmadi.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {clientModalOpen ? (
+                <div className="modal-backdrop">
+                  <form className="client-modal" onSubmit={handleCreateClient}>
+                    <div className="modal-head">
+                      <h2>Klent yaratish</h2>
+                      <button
+                        type="button"
+                        onClick={() => setClientModalOpen(false)}
+                      >
+                        Yopish
+                      </button>
+                    </div>
+                    <label>
+                      Klent ismi
+                      <input
+                        value={clientName}
+                        onChange={(event) => setClientName(event.target.value)}
+                        placeholder="Ismi"
+                        aria-label="Klent ismi"
+                      />
+                    </label>
+                    <label>
+                      Telefon raqami
+                      <input
+                        value={clientPhone}
+                        onChange={(event) => setClientPhone(event.target.value)}
+                        placeholder="Telefon raqami"
+                        aria-label="Klent telefon raqami"
+                      />
+                    </label>
+                    <label>
+                      Biz unga qarzmiz
+                      <input
+                        inputMode="numeric"
+                        value={clientOpeningPayable}
+                        onChange={(event) =>
+                          setClientOpeningPayable(
+                            formatNumberInput(event.target.value),
+                          )
+                        }
+                        placeholder="Masalan 3 000 000"
+                      />
+                    </label>
+                    <label>
+                      U bizga qarz
+                      <input
+                        inputMode="numeric"
+                        value={clientOpeningReceivable}
+                        onChange={(event) =>
+                          setClientOpeningReceivable(
+                            formatNumberInput(event.target.value),
+                          )
+                        }
+                        placeholder="Masalan 1 500 000"
+                      />
+                    </label>
+                    <button type="submit">Yaratish</button>
+                  </form>
+                </div>
+              ) : null}
+
+              {clientDetailModalOpen && selectedClient ? (
+                <div className="modal-backdrop">
+                  <div className="client-detail-modal">
+                    <div className="modal-head">
+                      <div>
+                        <h2>{selectedClient.name}</h2>
+                        <p>{selectedClient.phone || '-'}</p>
+                      </div>
+                      <div className="modal-head-actions">
+                        <button
+                          className="view-button"
+                          type="button"
+                          onClick={handleExportClientDetailToExcel}
+                        >
+                          Excelga yuklash
+                        </button>
+                        <button type="button" onClick={handleCloseClientDetail}>
+                          Yopish
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="client-detail-stats">
+                      <div>
+                        <span>Berish kerak</span>
+                        <strong>
+                          {formatMoney(
+                            selectedClientObligationAmount +
+                              selectedClientOpeningPayable,
+                          )}{' '}
+                          so'm
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Berganmiz</span>
+                        <strong>
+                          {formatMoney(
+                            selectedClientPaidAmount +
+                              selectedClientOpeningReceivable,
+                          )}{' '}
+                          so'm
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Qolgan qarz</span>
+                        <strong>{formatMoney(selectedClientRemainingDebt)} so'm</strong>
+                      </div>
+                    </div>
+
+                    <form className="client-payment-form" onSubmit={handleCreateClientPayment}>
+                      <label>
+                        Sana
+                        <input
+                          type="date"
+                          value={clientPaymentDate}
+                          onChange={(event) => {
+                            setClientPaymentError('')
+                            setClientPaymentDate(event.target.value)
+                          }}
+                        />
+                      </label>
+                      <label>
+                        Berilgan pul
+                        <input
+                          inputMode="numeric"
+                          value={clientPaymentAmount}
+                          onChange={(event) => {
+                            setClientPaymentError('')
+                            setClientPaymentAmount(
+                              formatNumberInput(event.target.value),
+                            )
+                          }}
+                          placeholder="Berilgan pul"
+                        />
+                      </label>
+                      <label>
+                        Izoh
+                        <input
+                          value={clientPaymentNote}
+                          onChange={(event) => {
+                            setClientPaymentError('')
+                            setClientPaymentNote(event.target.value)
+                          }}
+                          placeholder="Izoh"
+                        />
+                      </label>
+                      <button type="submit">To'lov qo'shish</button>
+                    </form>
+
+                    {clientPaymentError ? (
+                      <p className="expense-error">{clientPaymentError}</p>
+                    ) : null}
+
+                    <div className="client-detail-grid">
+                      <div className="client-detail-panel">
+                        <div className="panel-title">
+                          <h2>Qachon qancha yuk olgan</h2>
+                        </div>
+                        <div className="client-table-wrap">
+                          <table className="client-table">
+                            <thead>
+                              <tr>
+                                <th>Sana</th>
+                                <th>Topshirish</th>
+                                <th>Yuk kg</th>
+                                <th>To'lov kg</th>
+                                <th>Qarz</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedClientOpeningPayable ||
+                              selectedClientOpeningReceivable ? (
+                                <tr>
+                                  <td>Boshlang'ich</td>
+                                  <td>-</td>
+                                  <td>-</td>
+                                  <td>-</td>
+                                  <td>
+                                    {formatMoney(
+                                      selectedClientOpeningPayable -
+                                        selectedClientOpeningReceivable,
+                                    )}{' '}
+                                    so'm
+                                  </td>
+                                </tr>
+                              ) : null}
+                              {selectedClientObligationList.length ? (
+                                selectedClientObligationList.map((row) => (
+                                  <tr key={row.date}>
+                                    <td>{row.date}</td>
+                                    <td>{row.deliveries}</td>
+                                    <td>{formatWeight(row.cargoWeight)} kg</td>
+                                    <td>{formatWeight(row.payWeight)} kg</td>
+                                    <td>{formatMoney(row.obligationAmount)} so'm</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="5">Hali yuk yozuvi yo'q.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="client-detail-panel">
+                        <div className="panel-title">
+                          <h2>Qancha pul berganmiz</h2>
+                        </div>
+                        <div className="client-table-wrap">
+                          <table className="client-table">
+                            <thead>
+                              <tr>
+                                <th>Sana</th>
+                                <th>Summa</th>
+                                <th>Izoh</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedClientPaymentHistory.length ? (
+                                selectedClientPaymentHistory.map((row) => (
+                                  <tr key={row.id}>
+                                    <td>{row.date}</td>
+                                    <td>{formatMoney(row.amount)} so'm</td>
+                                    <td>{row.note || '-'}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="3">Hali to'lov yozuvi yo'q.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="client-list client-inline-list">
+                      {clients.map((client) =>
+                        client.id === editingClientId ? (
+                          <form
+                            className="client-edit-form"
+                            key={client.id}
+                            onSubmit={handleSaveClient}
+                          >
+                            <input
+                              value={editingClientName}
+                              onChange={(event) =>
+                                setEditingClientName(event.target.value)
+                              }
+                            />
+                            <input
+                              value={editingClientPhone}
+                              onChange={(event) =>
+                                setEditingClientPhone(event.target.value)
+                              }
+                            />
+                            <input
+                              value={editingClientOpeningPayable}
+                              onChange={(event) =>
+                                setEditingClientOpeningPayable(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }
+                              placeholder="Biz unga qarzmiz"
+                            />
+                            <input
+                              value={editingClientOpeningReceivable}
+                              onChange={(event) =>
+                                setEditingClientOpeningReceivable(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }
+                              placeholder="U bizga qarz"
+                            />
+                            <button className="save-button" type="submit">
+                              Saqlash
+                            </button>
+                            <button
+                              className="cancel-button"
+                              type="button"
+                              onClick={handleCancelEditClient}
+                            >
+                              Bekor qilish
+                            </button>
+                          </form>
+                        ) : null,
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activePage === 'factories' ? (
+            <div className="factories-page">
+              <div className="clients-toolbar">
+                <div className="clients-title">
+                  <h1>Zavod</h1>
+                </div>
+                <div className="clients-toolbar-actions">
+                  <label className="mini-date-field">
+                    Dan
+                    <input
+                      type="date"
+                      value={factoryFilters.from}
+                      onChange={(event) =>
+                        setFactoryFilters((filters) => ({
+                          ...filters,
+                          from: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="mini-date-field">
+                    Gacha
+                    <input
+                      type="date"
+                      value={factoryFilters.to}
+                      onChange={(event) =>
+                        setFactoryFilters((filters) => ({
+                          ...filters,
+                          to: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <button
+                    className="clients-add-button"
+                    type="button"
+                    onClick={() => {
+                      setFactoryName('')
+                      setFactoryModalOpen(true)
+                    }}
+                  >
+                    Zavod yaratish
+                  </button>
+                </div>
+              </div>
+
+              <div className="client-summary-card">
+                <div>
+                  <span>Berishi kerak</span>
+                  <strong>{formatMoney(totalFactoryObligationAmount)} so'm</strong>
+                </div>
+                <div>
+                  <span>Bergan</span>
+                  <strong>{formatMoney(totalFactoryPaidAmount)} so'm</strong>
+                </div>
+                <div>
+                  <span>Qolgan pul</span>
+                  <strong>{formatMoney(totalFactoryRemainingDebt)} so'm</strong>
+                </div>
+                <div>
+                  <span>Jami sof kg</span>
+                  <strong>{formatWeight(totalFactoryNetWeight)} kg</strong>
+                </div>
+              </div>
+
+              <div className="client-table-wrap">
+                <table className="client-table">
+                  <thead>
+                    <tr>
+                      <th>Zavod</th>
+                      <th>Jami yuk</th>
+                      <th>Berishi kerak</th>
+                      <th>Bergan</th>
+                      <th>Qolgan</th>
+                      <th>Amal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {factorySummaryRows.length ? (
+                      factorySummaryRows.map((row) => (
+                        <tr key={row.factory.id}>
+                          <td data-label="Zavod">{row.factory.name}</td>
+                          <td data-label="Jami yuk">
+                            {formatWeight(row.netWeight)} kg / {row.deliveries} ta
+                          </td>
+                          <td data-label="Berishi kerak">
+                            {formatMoney(row.obligationAmount)} so'm
+                          </td>
+                          <td data-label="Bergan">
+                            {formatMoney(row.paidAmount)} so'm
+                          </td>
+                          <td data-label="Qolgan">
+                            {formatMoney(row.remainingDebt)} so'm
+                          </td>
+                          <td data-label="Amal">
+                            <div className="client-actions">
+                              <button
+                                className="view-button"
+                                type="button"
+                                onClick={() => handleOpenFactoryDetail(row.factory.id)}
+                              >
+                                Ko'rish
+                              </button>
+                              <button
+                                className="edit-button"
+                                type="button"
+                                onClick={() => {
+                                  handleStartEditFactory(row.factory)
+                                  handleOpenFactoryDetail(row.factory.id)
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="delete-button"
+                                type="button"
+                                onClick={() => handleDeleteFactory(row.factory.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6">Tanlangan oraliqda zavod ma'lumoti topilmadi.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {factoryModalOpen ? (
+                <div className="modal-backdrop">
+                  <form className="client-modal" onSubmit={handleCreateFactory}>
+                    <div className="modal-head">
+                      <h2>Zavod yaratish</h2>
+                      <button
+                        type="button"
+                        onClick={() => setFactoryModalOpen(false)}
+                      >
+                        Yopish
+                      </button>
+                    </div>
+                    <label>
+                      Zavod nomi
+                      <input
+                        value={factoryName}
+                        onChange={(event) => setFactoryName(event.target.value)}
+                        placeholder="Nomi"
+                        aria-label="Zavod nomi"
+                      />
+                    </label>
+                    <label>
+                      Biz unga qarzmiz
+                      <input
+                        inputMode="numeric"
+                        value={factoryOpeningPayable}
+                        onChange={(event) =>
+                          setFactoryOpeningPayable(
+                            formatNumberInput(event.target.value),
+                          )
+                        }
+                        placeholder="Masalan 2 000 000"
+                      />
+                    </label>
+                    <label>
+                      U bizga qarz
+                      <input
+                        inputMode="numeric"
+                        value={factoryOpeningReceivable}
+                        onChange={(event) =>
+                          setFactoryOpeningReceivable(
+                            formatNumberInput(event.target.value),
+                          )
+                        }
+                        placeholder="Masalan 5 000 000"
+                      />
+                    </label>
+                    <button type="submit">Yaratish</button>
+                  </form>
+                </div>
+              ) : null}
+
+              {factoryDetailModalOpen && selectedFactory ? (
+                <div className="modal-backdrop">
+                  <div className="client-detail-modal">
+                    <div className="modal-head">
+                      <div>
+                        <h2>{selectedFactory.name}</h2>
+                        <p>Zavoddan tushadigan pul va yuk tarixi</p>
+                      </div>
+                      <div className="modal-head-actions">
+                        <button
+                          className="view-button"
+                          type="button"
+                          onClick={handleExportFactoryDetailToExcel}
+                        >
+                          Excelga yuklash
+                        </button>
+                        <button type="button" onClick={handleCloseFactoryDetail}>
+                          Yopish
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="client-detail-stats">
+                      <div>
+                        <span>Berishi kerak</span>
+                        <strong>
+                          {formatMoney(
+                            selectedFactoryObligationAmount +
+                              selectedFactoryOpeningPayable,
+                          )}{' '}
+                          so'm
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Bergan</span>
+                        <strong>
+                          {formatMoney(
+                            selectedFactoryPaidAmount +
+                              selectedFactoryOpeningReceivable,
+                          )}{' '}
+                          so'm
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Qolgan pul</span>
+                        <strong>{formatMoney(selectedFactoryRemainingDebt)} so'm</strong>
+                      </div>
+                    </div>
+
+                    <form
+                      className="client-payment-form factory-payment-form"
+                      onSubmit={handleCreateFactoryPayment}
+                    >
+                      <label>
+                        Sana
+                        <input
+                          type="date"
+                          value={factoryPaymentDate}
+                          onChange={(event) => {
+                            setFactoryPaymentError('')
+                            setFactoryPaymentDate(event.target.value)
+                          }}
+                        />
+                      </label>
+                      <label>
+                        USD
+                        <input
+                          inputMode="numeric"
+                          value={factoryPaymentUsd}
+                          onChange={(event) => {
+                            setFactoryPaymentError('')
+                            setFactoryPaymentUsd(
+                              formatNumberInput(event.target.value),
+                            )
+                          }}
+                          placeholder="Masalan 2 000"
+                        />
+                      </label>
+                      <label>
+                        Kurs
+                        <input
+                          inputMode="numeric"
+                          value={factoryPaymentRate}
+                          onChange={(event) => {
+                            setFactoryPaymentError('')
+                            setFactoryPaymentRate(
+                              formatNumberInput(event.target.value),
+                            )
+                            setFactoryPaymentAmount(
+                              formatNumberInput(
+                                String(
+                                  parseNumber(factoryPaymentUsd) *
+                                    parseNumber(event.target.value),
+                                ),
+                              ),
+                            )
+                          }}
+                          placeholder="Masalan 12 050"
+                        />
+                      </label>
+                      <label>
+                        So'm
+                        <input
+                          value={formatNumberInput(String(factoryPaymentCalculatedAmount || ''))}
+                          readOnly
+                          placeholder="Avto hisoblanadi"
+                        />
+                      </label>
+                      <label>
+                        Qaysi yuk uchun
+                        <input
+                          value={factoryPaymentNote}
+                          onChange={(event) => {
+                            setFactoryPaymentError('')
+                            setFactoryPaymentNote(event.target.value)
+                          }}
+                          placeholder="Masalan: 60D683QA yoki umumiy"
+                        />
+                      </label>
+                      <button type="submit">To'lov qo'shish</button>
+                    </form>
+
+                    {factoryPaymentError ? (
+                      <p className="expense-error">{factoryPaymentError}</p>
+                    ) : null}
+
+                    <div className="client-detail-grid">
+                      <div className="client-detail-panel">
+                        <div className="panel-title">
+                          <h2>Qaysi kuni qaysi yukdan qancha pul qolgan</h2>
+                        </div>
+                        <div className="client-table-wrap">
+                          <table className="client-table">
+                            <thead>
+                              <tr>
+                                <th>Sana</th>
+                                <th>Mashina</th>
+                                <th>Sof kg</th>
+                                <th>Bizning pul</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedFactoryOpeningPayable ||
+                              selectedFactoryOpeningReceivable ? (
+                                <tr>
+                                  <td>Boshlang'ich</td>
+                                  <td>-</td>
+                                  <td>-</td>
+                                  <td>
+                                    {formatMoney(
+                                      selectedFactoryOpeningPayable -
+                                        selectedFactoryOpeningReceivable,
+                                    )}{' '}
+                                    so'm
+                                  </td>
+                                </tr>
+                              ) : null}
+                              {selectedFactoryCargoEntries.length ? (
+                                selectedFactoryCargoEntries.map((row) => (
+                                  <tr key={row.id}>
+                                    <td>{row.date}</td>
+                                    <td>{row.carNumber}</td>
+                                    <td>{formatWeight(row.netWeight)} kg</td>
+                                    <td>{formatMoney(row.totalAmount)} so'm</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="4">Hali yuk yozuvi yo'q.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="client-detail-panel">
+                        <div className="panel-title">
+                          <h2>Zavod qanchasini bergan</h2>
+                        </div>
+                        <div className="client-table-wrap">
+                          <table className="client-table">
+                            <thead>
+                              <tr>
+                                <th>Sana</th>
+                                <th>USD</th>
+                                <th>Kurs</th>
+                                <th>Summa</th>
+                                <th>Izoh</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedFactoryPaymentHistory.length ? (
+                                selectedFactoryPaymentHistory.map((row) => (
+                                  <tr key={row.id}>
+                                    <td>{row.date}</td>
+                                    <td>
+                                      {row.usdAmount
+                                        ? `${formatMoney(row.usdAmount)} $`
+                                        : '-'}
+                                    </td>
+                                    <td>
+                                      {row.exchangeRate
+                                        ? formatMoney(row.exchangeRate)
+                                        : '-'}
+                                    </td>
+                                    <td>{formatMoney(row.amount)} so'm</td>
+                                    <td>{row.note || '-'}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="5">Hali to'lov yozuvi yo'q.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="client-list client-inline-list">
+                      {factories.map((factory) =>
+                        factory.id === editingFactoryId ? (
+                          <form
+                            className="factory-edit-form"
+                            key={factory.id}
+                            onSubmit={handleSaveFactory}
+                          >
+                            <input
+                              value={editingFactoryName}
+                              onChange={(event) =>
+                                setEditingFactoryName(event.target.value)
+                              }
+                            />
+                            <input
+                              value={editingFactoryOpeningPayable}
+                              onChange={(event) =>
+                                setEditingFactoryOpeningPayable(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }
+                              placeholder="Biz unga qarzmiz"
+                            />
+                            <input
+                              value={editingFactoryOpeningReceivable}
+                              onChange={(event) =>
+                                setEditingFactoryOpeningReceivable(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }
+                              placeholder="U bizga qarz"
+                            />
+                            <button className="save-button" type="submit">
+                              Saqlash
+                            </button>
+                            <button
+                              className="cancel-button"
+                              type="button"
+                              onClick={handleCancelEditFactory}
+                            >
+                              Bekor qilish
+                            </button>
+                          </form>
+                        ) : null,
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activePage === 'expenses' ? (
+            <div className="expenses-page">
+              <div className="page-heading">
+                <h1>Xarajatlar</h1>
+                <p>Xarajat summasi va sababini kiriting.</p>
+              </div>
+
+              <div className="expense-toolbar">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpenseError('')
+                    setEditingExpenseId(null)
+                    setExpenseDate('')
+                    setExpenseAmount('')
+                    setExpenseReason('')
+                    setExpenseModalOpen(true)
+                  }}
+                >
+                  Xarajat qo'shish
+                </button>
+              </div>
+
+              <div className="expense-list">
+                {expenses.length ? (
+                  expenses.map((expense) => (
+                    <div className="expense-item" key={expense.id}>
+                      <div className="expense-info">
+                        <strong>{formatMoney(expense.amount)} so'm</strong>
+                        <span>{expense.date || 'Sanasiz'}</span>
+                        <span>{expense.reason}</span>
+                      </div>
+                      <div className="expense-actions">
+                        <button
+                          className="edit-button"
+                          type="button"
+                          onClick={() => handleEditExpense(expense)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="delete-button"
+                          type="button"
+                          onClick={() => handleDeleteExpense(expense.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="empty-text">Hali xarajat kiritilmagan.</p>
+                )}
+              </div>
+
+              {expenseModalOpen ? (
+                <div className="modal-backdrop">
+                  <form className="expense-modal" onSubmit={handleCreateExpense}>
+                    <div className="modal-head">
+                      <h2>
+                        {editingExpenseId ? 'Xarajatni tahrirlash' : "Xarajat qo'shish"}
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={handleCloseExpenseModal}
+                      >
+                        Yopish
+                      </button>
+                    </div>
+                    <label>
+                      Xarajat sanasi
+                      <input
+                        type="date"
+                        value={expenseDate}
+                        onChange={(event) => {
+                          setExpenseError('')
+                          setExpenseDate(event.target.value)
+                        }}
+                      />
+                    </label>
+                    <label>
+                      Xarajat summasi
+                      <input
+                        inputMode="numeric"
+                        value={expenseAmount}
+                        onChange={(event) => {
+                          setExpenseError('')
+                          setExpenseAmount(formatNumberInput(event.target.value))
+                        }}
+                        placeholder="Xarajat summasi"
+                      />
+                    </label>
+                    <label>
+                      Xarajat sababi
+                      <input
+                        value={expenseReason}
+                        onChange={(event) => {
+                          setExpenseError('')
+                          setExpenseReason(event.target.value)
+                        }}
+                        placeholder="Xarajat sababi"
+                      />
+                    </label>
+                    {expenseError ? (
+                      <p className="expense-error">{expenseError}</p>
+                    ) : null}
+                    <button type="submit">
+                      {editingExpenseId ? 'Saqlash' : 'Yaratish'}
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activePage === 'cargo-delivery' ? (
+            <div className="cargo-page">
+              <div className="today-summary">
+                <div>
+                  <span>{summaryKgLabel}</span>
+                  <strong>{formatWeight(summaryTotalKg)} kg</strong>
+                </div>
+                <div>
+                  <span>{summaryAmountLabel}</span>
+                  <strong>{formatMoney(summaryTotalAmount)} so'm</strong>
+                </div>
+                <div>
+                  <span>Kunlik rasxod</span>
+                  <strong>{formatMoney(summaryDailyExpense)} so'm</strong>
+                </div>
+                <div>
+                  <span>{summaryProfitLabel}</span>
+                  <strong>{formatMoney(summaryNetProfitAmount)} so'm</strong>
                 </div>
               </div>
 
               <div className="table-toolbar">
+                <label className="mini-date-field">
+                  Dan
+                  <input
+                    type="date"
+                    value={dashboardFilters.from}
+                    onChange={(event) =>
+                      setDashboardFilters((filters) => ({
+                        ...filters,
+                        from: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="mini-date-field">
+                  Gacha
+                  <input
+                    type="date"
+                    value={dashboardFilters.to}
+                    onChange={(event) =>
+                      setDashboardFilters((filters) => ({
+                        ...filters,
+                        to: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="daily-expense-field">
+                  Kunlik rasxod
+                  <input
+                    inputMode="numeric"
+                    value={dailyExpenseInput}
+                    onBlur={saveDailyExpense}
+                    onChange={(event) => {
+                      setDailyExpenseError('')
+                      setDailyExpenseEditing(true)
+                      setDailyExpenseInput(formatNumberInput(event.target.value))
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                      }
+                    }}
+                    placeholder="Rasxod"
+                    disabled={!canEditDailyExpense || dailyExpenseSaving}
+                  />
+                </label>
+                <button
+                  className="daily-expense-submit"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={saveDailyExpense}
+                  disabled={!canEditDailyExpense || dailyExpenseSaving}
+                >
+                  {dailyExpenseSaving ? 'Saqlanmoqda...' : 'Kiritish'}
+                </button>
+                {dailyExpenseError ? (
+                  <p className="daily-expense-error">{dailyExpenseError}</p>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleExportCargoToExcel}
-                  disabled={!cargoEntries.length}
+                  disabled={!displayedCargoEntries.length}
                 >
                   Excelga yuklash
                 </button>
@@ -690,6 +3078,40 @@ function App() {
                     {cars.map((car) => (
                       <option key={car.id} value={car.id}>
                         {car.number}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Klent
+                  <select
+                    value={cargoForm.clientId}
+                    onChange={(event) =>
+                      updateCargoField('clientId', event.target.value)
+                    }
+                  >
+                    <option value="">Klent tanlang</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Zavod
+                  <select
+                    value={cargoForm.factoryId}
+                    onChange={(event) =>
+                      updateCargoField('factoryId', event.target.value)
+                    }
+                  >
+                    <option value="">Zavod tanlang</option>
+                    {factories.map((factory) => (
+                      <option key={factory.id} value={factory.id}>
+                        {factory.name}
                       </option>
                     ))}
                   </select>
@@ -736,6 +3158,21 @@ function App() {
                   />
                 </label>
 
+                <label>
+                  Yolkira
+                  <input
+                    inputMode="numeric"
+                    value={cargoForm.transportCost}
+                    onChange={(event) =>
+                      updateCargoField(
+                        'transportCost',
+                        formatNumberInput(event.target.value),
+                      )
+                    }
+                    placeholder="Yolkira"
+                  />
+                </label>
+
                 <div className="calculated-field highlight-field">
                   <span>Qolgan vazn</span>
                   <strong>{formatWeight(netWeight)}</strong>
@@ -753,9 +3190,49 @@ function App() {
                   />
                 </label>
 
+                <label>
+                  Klent narxi
+                  <input
+                    inputMode="numeric"
+                    value={cargoForm.clientPricePerKg}
+                    onChange={(event) =>
+                      updateCargoField('clientPricePerKg', event.target.value)
+                    }
+                    placeholder="Klent narxi"
+                  />
+                </label>
+
+                <label>
+                  Klent hisob turi
+                  <select
+                    value={cargoForm.clientWeightMode}
+                    onChange={(event) =>
+                      updateCargoField('clientWeightMode', event.target.value)
+                    }
+                  >
+                    <option value="cargo">Qolgan yuki bo'yicha</option>
+                    <option value="net">Qolgan vazn bo'yicha</option>
+                  </select>
+                </label>
+
                 <div className="amount-box">
                   <span>Aniq summa</span>
                   <strong>{formatMoney(totalAmount)} so'm</strong>
+                </div>
+
+                <div className="calculated-field">
+                  <span>To'lov kg</span>
+                  <strong>{formatWeight(clientPayWeight)} kg</strong>
+                </div>
+
+                <div className="calculated-field">
+                  <span>Klentga to'lov</span>
+                  <strong>{formatMoney(clientTotalAmount)} so'm</strong>
+                </div>
+
+                <div className="amount-box profit-box">
+                  <span>Foyda</span>
+                  <strong>{formatMoney(profitAmount)} so'm</strong>
                 </div>
 
                 <div className="cargo-form-actions">
@@ -780,22 +3257,31 @@ function App() {
                     <tr>
                       <th>Sana</th>
                       <th>Mashina</th>
+                      <th>Klent</th>
+                      <th>Zavod</th>
                       <th>To'la</th>
                       <th>Yuksiz</th>
                       <th>Yuk</th>
                       <th>Skidka</th>
+                      <th>Yolkira</th>
                       <th>Qolgan</th>
+                      <th>To'lov kg</th>
                       <th>Narx</th>
+                      <th>Klent narxi</th>
+                      <th>Klentga to'lov</th>
                       <th>Summa</th>
+                      <th>Foyda</th>
                       <th>Amal</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cargoEntries.length ? (
-                      cargoEntries.map((entry) => (
+                    {displayedCargoEntries.length ? (
+                      displayedCargoEntries.map((entry) => (
                         <tr key={entry.id}>
                           <td data-label="Sana">{entry.date}</td>
                           <td data-label="Mashina">{entry.carNumber}</td>
+                          <td data-label="Klent">{entry.clientName || '-'}</td>
+                          <td data-label="Zavod">{entry.factoryName || '-'}</td>
                           <td data-label="To'la">
                             {formatWeight(entry.grossWeight)}
                           </td>
@@ -808,14 +3294,29 @@ function App() {
                           <td data-label="Skidka">
                             {formatWeight(entry.discountWeight)}
                           </td>
+                          <td data-label="Yolkira">
+                            {formatMoney(entry.transportCost || 0)} so'm
+                          </td>
                           <td className="net-cell" data-label="Qolgan">
                             {formatWeight(entry.netWeight)}
+                          </td>
+                          <td data-label="To'lov kg">
+                            {formatWeight(entry.clientPayWeight || entry.cargoWeight)}
                           </td>
                           <td className="price-cell" data-label="Narx">
                             {formatMoney(entry.pricePerKg)}
                           </td>
+                          <td data-label="Klent narxi">
+                            {formatMoney(entry.clientPricePerKg || 0)}
+                          </td>
+                          <td data-label="Klentga to'lov">
+                            {formatMoney(entry.clientTotalAmount || 0)} so'm
+                          </td>
                           <td data-label="Summa">
                             {formatMoney(entry.totalAmount)} so'm
+                          </td>
+                          <td data-label="Foyda">
+                            {formatMoney(entry.profitAmount || 0)} so'm
                           </td>
                           <td data-label="Amal">
                             <div className="table-actions">
@@ -839,7 +3340,7 @@ function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="10">Hali yuk topshirish yozilmagan.</td>
+                        <td colSpan="17">Hali yuk topshirish yozilmagan.</td>
                       </tr>
                     )}
                   </tbody>
