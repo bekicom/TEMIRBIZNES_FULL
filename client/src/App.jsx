@@ -74,8 +74,8 @@ const autosizeWorksheetColumns = (worksheet, rows) => {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (window.location.hostname === 'localhost'
-    ? `${window.location.protocol}//${window.location.hostname}:5000`
+  (import.meta.env.DEV
+    ? 'http://127.0.0.1:5000'
     : 'https://temirbiznes-api.vercel.app')
 
 const requestJson = async (path, options = {}) => {
@@ -903,7 +903,7 @@ function App() {
       setDataError('')
       setUser(data.user)
     } catch (err) {
-      setError(err.message)
+      setError(err.message === 'Failed to fetch' ? 'Server bilan aloqa uzildi' : err.message)
     } finally {
       setIsLoading(false)
     }
