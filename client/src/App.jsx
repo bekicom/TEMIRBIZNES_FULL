@@ -167,6 +167,8 @@ function App() {
   const [factoryPaymentAmount, setFactoryPaymentAmount] = useState('')
   const [factoryPaymentNote, setFactoryPaymentNote] = useState('')
   const [factoryPaymentError, setFactoryPaymentError] = useState('')
+  const [editingFactoryPaymentId, setEditingFactoryPaymentId] = useState(null)
+  const [factoryPaymentSaving, setFactoryPaymentSaving] = useState(false)
   const [expenseDate, setExpenseDate] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseReason, setExpenseReason] = useState('')
@@ -1205,6 +1207,7 @@ function App() {
     setFactoryPaymentAmount('')
     setFactoryPaymentNote('')
     setFactoryPaymentError('')
+    setEditingFactoryPaymentId(null)
     setFactoryDetailModalOpen(true)
   }
 
@@ -1217,6 +1220,7 @@ function App() {
     setFactoryPaymentAmount('')
     setFactoryPaymentNote('')
     setFactoryPaymentError('')
+    setEditingFactoryPaymentId(null)
   }
 
   const handleSaveFactory = async (event) => {
@@ -1259,6 +1263,10 @@ function App() {
   const handleCreateFactoryPayment = async (event) => {
     event.preventDefault()
 
+    if (factoryPaymentSaving) {
+      return
+    }
+
     const usdAmount = parseNumber(factoryPaymentUsd)
     const exchangeRate = parseNumber(factoryPaymentRate)
     const amount = usdAmount * exchangeRate
@@ -1289,24 +1297,83 @@ function App() {
       return
     }
 
+    setFactoryPaymentSaving(true)
+
     try {
-      await createItem(
-        'factoryPayments',
-        {
-          factoryId: selectedFactoryId,
-          date: factoryPaymentDate,
-          amount,
-          usdAmount,
-          exchangeRate,
-          note,
-        },
-        setFactoryPayments,
-      )
+      const payload = {
+        factoryId: selectedFactoryId,
+        date: factoryPaymentDate,
+        amount,
+        usdAmount,
+        exchangeRate,
+        note,
+      }
+
+      if (editingFactoryPaymentId) {
+        await updateItem(
+          'factoryPayments',
+          editingFactoryPaymentId,
+          payload,
+          setFactoryPayments,
+        )
+      } else {
+        await createItem(
+          'factoryPayments',
+          payload,
+          setFactoryPayments,
+        )
+      }
+
       setFactoryPaymentUsd('')
       setFactoryPaymentRate('')
       setFactoryPaymentAmount('')
       setFactoryPaymentNote('')
       setFactoryPaymentError('')
+      setEditingFactoryPaymentId(null)
+    } catch (err) {
+      setFactoryPaymentError(err.message)
+    } finally {
+      setFactoryPaymentSaving(false)
+    }
+  }
+
+  const handleEditFactoryPayment = (payment) => {
+    setDataError('')
+    setFactoryPaymentError('')
+    setEditingFactoryPaymentId(payment.id)
+    setFactoryPaymentDate(payment.date || getTodayDate())
+    setFactoryPaymentUsd(
+      payment.usdAmount ? formatNumberInput(String(payment.usdAmount)) : '',
+    )
+    setFactoryPaymentRate(
+      payment.exchangeRate ? formatNumberInput(String(payment.exchangeRate)) : '',
+    )
+    setFactoryPaymentAmount(
+      payment.amount ? formatNumberInput(String(payment.amount)) : '',
+    )
+    setFactoryPaymentNote(payment.note || '')
+  }
+
+  const handleCancelFactoryPaymentEdit = () => {
+    setEditingFactoryPaymentId(null)
+    setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentUsd('')
+    setFactoryPaymentRate('')
+    setFactoryPaymentAmount('')
+    setFactoryPaymentNote('')
+    setFactoryPaymentError('')
+  }
+
+  const handleDeleteFactoryPayment = async (paymentId) => {
+    if (factoryPaymentSaving) {
+      return
+    }
+
+    try {
+      await deleteItem('factoryPayments', paymentId, setFactoryPayments)
+      if (editingFactoryPaymentId === paymentId) {
+        handleCancelFactoryPaymentEdit()
+      }
     } catch (err) {
       setFactoryPaymentError(err.message)
     }
@@ -3161,7 +3228,23 @@ function App() {
                           placeholder="Masalan: 60D683QA yoki umumiy"
                         />
                       </label>
-                      <button type="submit">To'lov qo'shish</button>
+                      <button type="submit" disabled={factoryPaymentSaving}>
+                        {factoryPaymentSaving
+                          ? 'Saqlanmoqda...'
+                          : editingFactoryPaymentId
+                            ? "To'lovni saqlash"
+                            : "To'lov qo'shish"}
+                      </button>
+                      {editingFactoryPaymentId ? (
+                        <button
+                          className="cancel-button"
+                          type="button"
+                          onClick={handleCancelFactoryPaymentEdit}
+                          disabled={factoryPaymentSaving}
+                        >
+                          Bekor qilish
+                        </button>
+                      ) : null}
                     </form>
 
                     {factoryPaymentError ? (
@@ -3230,6 +3313,7 @@ function App() {
                                 <th>Kurs</th>
                                 <th>Summa</th>
                                 <th>Izoh</th>
+                                <th>Amal</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3249,11 +3333,31 @@ function App() {
                                     </td>
                                     <td>{formatMoney(row.amount)} so'm</td>
                                     <td>{row.note || '-'}</td>
+                                    <td>
+                                      <div className="table-actions">
+                                        <button
+                                          className="edit-button"
+                                          type="button"
+                                          onClick={() => handleEditFactoryPayment(row)}
+                                          disabled={factoryPaymentSaving}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          className="delete-button"
+                                          type="button"
+                                          onClick={() => handleDeleteFactoryPayment(row.id)}
+                                          disabled={factoryPaymentSaving}
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </td>
                                   </tr>
                                 ))
                               ) : (
                                 <tr>
-                                  <td colSpan="5">Hali to'lov yozuvi yo'q.</td>
+                                  <td colSpan="6">Hali to'lov yozuvi yo'q.</td>
                                 </tr>
                               )}
                             </tbody>

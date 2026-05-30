@@ -990,12 +990,18 @@ body {
 }
 
 .factory-payment-form {
-  grid-template-columns: 140px 130px 130px 150px minmax(0, 1fr) 120px;
+  grid-template-columns: 140px 120px 120px 150px minmax(0, 1fr) 120px 120px;
 }
 
 .client-payment-form button {
   color: #ffffff;
   background: #2563eb;
+}
+
+.client-payment-form button:disabled,
+.table-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .client-payment-form input[readonly] {
