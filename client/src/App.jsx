@@ -162,6 +162,7 @@ function App() {
   })
   const [factoryPayments, setFactoryPayments] = useState([])
   const [factoryPaymentDate, setFactoryPaymentDate] = useState(getTodayDate())
+  const [factoryPaymentMode, setFactoryPaymentMode] = useState('usd')
   const [factoryPaymentUsd, setFactoryPaymentUsd] = useState('')
   const [factoryPaymentRate, setFactoryPaymentRate] = useState('')
   const [factoryPaymentAmount, setFactoryPaymentAmount] = useState('')
@@ -734,8 +735,11 @@ function App() {
     selectedFactoryPaidAmount
   const factoryPaymentUsdValue = parseNumber(factoryPaymentUsd)
   const factoryPaymentRateValue = parseNumber(factoryPaymentRate)
+  const factoryPaymentAmountValue = parseNumber(factoryPaymentAmount)
   const factoryPaymentCalculatedAmount =
-    factoryPaymentUsdValue * factoryPaymentRateValue
+    factoryPaymentMode === 'usd'
+      ? factoryPaymentUsdValue * factoryPaymentRateValue
+      : factoryPaymentAmountValue
   const totalClientDebtToUs = clientSummaryRows.reduce(
     (sum, row) => sum + Math.max(-row.remainingDebt, 0),
     0,
@@ -1202,6 +1206,7 @@ function App() {
     setDataError('')
     setSelectedFactoryId(factoryId)
     setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentMode('usd')
     setFactoryPaymentUsd('')
     setFactoryPaymentRate('')
     setFactoryPaymentAmount('')
@@ -1215,6 +1220,7 @@ function App() {
     setFactoryDetailModalOpen(false)
     setSelectedFactoryId('')
     setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentMode('usd')
     setFactoryPaymentUsd('')
     setFactoryPaymentRate('')
     setFactoryPaymentAmount('')
@@ -1269,7 +1275,10 @@ function App() {
 
     const usdAmount = parseNumber(factoryPaymentUsd)
     const exchangeRate = parseNumber(factoryPaymentRate)
-    const amount = usdAmount * exchangeRate
+    const amount =
+      factoryPaymentMode === 'usd'
+        ? usdAmount * exchangeRate
+        : parseNumber(factoryPaymentAmount)
     const note = factoryPaymentNote.trim()
 
     if (!selectedFactoryId) {
@@ -1282,13 +1291,18 @@ function App() {
       return
     }
 
-    if (!usdAmount) {
-      setFactoryPaymentError('USD summani kiriting')
-      return
-    }
+    if (factoryPaymentMode === 'usd') {
+      if (!usdAmount) {
+        setFactoryPaymentError('USD summani kiriting')
+        return
+      }
 
-    if (!exchangeRate) {
-      setFactoryPaymentError('Kursni kiriting')
+      if (!exchangeRate) {
+        setFactoryPaymentError('Kursni kiriting')
+        return
+      }
+    } else if (!amount) {
+      setFactoryPaymentError("So'm summani kiriting")
       return
     }
 
@@ -1304,8 +1318,9 @@ function App() {
         factoryId: selectedFactoryId,
         date: factoryPaymentDate,
         amount,
-        usdAmount,
-        exchangeRate,
+        paymentMode: factoryPaymentMode,
+        usdAmount: factoryPaymentMode === 'usd' ? usdAmount : 0,
+        exchangeRate: factoryPaymentMode === 'usd' ? exchangeRate : 0,
         note,
       }
 
@@ -1324,6 +1339,7 @@ function App() {
         )
       }
 
+      setFactoryPaymentMode('usd')
       setFactoryPaymentUsd('')
       setFactoryPaymentRate('')
       setFactoryPaymentAmount('')
@@ -1342,6 +1358,9 @@ function App() {
     setFactoryPaymentError('')
     setEditingFactoryPaymentId(payment.id)
     setFactoryPaymentDate(payment.date || getTodayDate())
+    setFactoryPaymentMode(
+      payment.paymentMode || (payment.usdAmount || payment.exchangeRate ? 'usd' : 'uzs'),
+    )
     setFactoryPaymentUsd(
       payment.usdAmount ? formatNumberInput(String(payment.usdAmount)) : '',
     )
@@ -1357,6 +1376,7 @@ function App() {
   const handleCancelFactoryPaymentEdit = () => {
     setEditingFactoryPaymentId(null)
     setFactoryPaymentDate(getTodayDate())
+    setFactoryPaymentMode('usd')
     setFactoryPaymentUsd('')
     setFactoryPaymentRate('')
     setFactoryPaymentAmount('')
@@ -3162,6 +3182,34 @@ function App() {
                       className="client-payment-form factory-payment-form"
                       onSubmit={handleCreateFactoryPayment}
                     >
+                      <div className="payment-mode-switch">
+                        <span>To'lov turi</span>
+                        <div className="payment-mode-buttons">
+                          <button
+                            type="button"
+                            className={factoryPaymentMode === 'usd' ? 'active' : ''}
+                            onClick={() => {
+                              setFactoryPaymentError('')
+                              setFactoryPaymentMode('usd')
+                              setFactoryPaymentAmount('')
+                            }}
+                          >
+                            USD
+                          </button>
+                          <button
+                            type="button"
+                            className={factoryPaymentMode === 'uzs' ? 'active' : ''}
+                            onClick={() => {
+                              setFactoryPaymentError('')
+                              setFactoryPaymentMode('uzs')
+                              setFactoryPaymentUsd('')
+                              setFactoryPaymentRate('')
+                            }}
+                          >
+                            So'm
+                          </button>
+                        </div>
+                      </div>
                       <label>
                         Sana
                         <input
@@ -3173,44 +3221,61 @@ function App() {
                           }}
                         />
                       </label>
+                      {factoryPaymentMode === 'usd' ? (
+                        <>
+                          <label>
+                            USD
+                            <input
+                              inputMode="numeric"
+                              value={factoryPaymentUsd}
+                              onChange={(event) => {
+                                setFactoryPaymentError('')
+                                setFactoryPaymentUsd(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }}
+                              placeholder="Masalan 2 000"
+                            />
+                          </label>
+                          <label>
+                            Kurs
+                            <input
+                              inputMode="numeric"
+                              value={factoryPaymentRate}
+                              onChange={(event) => {
+                                setFactoryPaymentError('')
+                                setFactoryPaymentRate(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }}
+                              placeholder="Masalan 12 050"
+                            />
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          <label>
+                            So'm
+                            <input
+                              inputMode="numeric"
+                              value={factoryPaymentAmount}
+                              onChange={(event) => {
+                                setFactoryPaymentError('')
+                                setFactoryPaymentAmount(
+                                  formatNumberInput(event.target.value),
+                                )
+                              }}
+                              placeholder="Masalan 24 100 000"
+                            />
+                          </label>
+                          <label>
+                            Kurs
+                            <input value="-" readOnly />
+                          </label>
+                        </>
+                      )}
                       <label>
-                        USD
-                        <input
-                          inputMode="numeric"
-                          value={factoryPaymentUsd}
-                          onChange={(event) => {
-                            setFactoryPaymentError('')
-                            setFactoryPaymentUsd(
-                              formatNumberInput(event.target.value),
-                            )
-                          }}
-                          placeholder="Masalan 2 000"
-                        />
-                      </label>
-                      <label>
-                        Kurs
-                        <input
-                          inputMode="numeric"
-                          value={factoryPaymentRate}
-                          onChange={(event) => {
-                            setFactoryPaymentError('')
-                            setFactoryPaymentRate(
-                              formatNumberInput(event.target.value),
-                            )
-                            setFactoryPaymentAmount(
-                              formatNumberInput(
-                                String(
-                                  parseNumber(factoryPaymentUsd) *
-                                    parseNumber(event.target.value),
-                                ),
-                              ),
-                            )
-                          }}
-                          placeholder="Masalan 12 050"
-                        />
-                      </label>
-                      <label>
-                        So'm
+                        Jami so'm
                         <input
                           value={formatNumberInput(String(factoryPaymentCalculatedAmount || ''))}
                           readOnly

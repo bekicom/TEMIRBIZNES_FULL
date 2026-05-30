@@ -998,6 +998,31 @@ body {
   background: #2563eb;
 }
 
+.payment-mode-switch {
+  display: grid;
+  gap: 5px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.payment-mode-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.payment-mode-buttons button {
+  min-height: 36px;
+  padding: 0 12px;
+  color: #334155;
+  background: #e2e8f0;
+}
+
+.payment-mode-buttons button.active {
+  color: #ffffff;
+  background: #2563eb;
+}
+
 .client-payment-form button:disabled,
 .table-actions button:disabled {
   cursor: not-allowed;
