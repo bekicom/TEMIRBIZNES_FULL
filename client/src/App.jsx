@@ -435,8 +435,8 @@ function App() {
         0,
       )
       const openingBalance =
-        openingPayable -
-        openingReceivable +
+        openingReceivable -
+        openingPayable +
         previousObligationAmount -
         previousPaidAmount
       const remainingDebt = openingBalance + periodObligationAmount - periodPaidAmount
@@ -721,8 +721,8 @@ function App() {
     0,
   )
   const selectedFactoryOpeningBalance =
-    selectedFactoryOpeningPayable -
-    selectedFactoryOpeningReceivable +
+    selectedFactoryOpeningReceivable -
+    selectedFactoryOpeningPayable +
     selectedFactoryPreviousObligationAmount -
     selectedFactoryPreviousPaidCarry
   const selectedFactoryPaidAmount = selectedFactoryPaymentHistory.reduce(
